@@ -19,3 +19,11 @@ export const PACK_SETS = [
     ]
   }
 ];
+
+// 출시 예정 자리표시(카드팩 목록의 COMING SOON). 저장·뽑기·컬렉션은 PACK_SETS 만 사용하므로 여기 항목은 선택/뽑기 불가.
+// 새 팩 출시 시: 위 PACK_SETS 에 팩을 추가하고, 아래 UPCOMING_PACKS 에서 한 자리를 제거한다.
+export const UPCOMING_PACKS = [
+  {id: 'soon-01', label: '준비 중'},
+  {id: 'soon-02', label: '준비 중'},
+  {id: 'soon-03', label: '준비 중'}
+];

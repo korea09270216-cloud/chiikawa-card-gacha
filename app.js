@@ -1,5 +1,6 @@
-import { PACK_SETS } from './packs.js?v=3';
-import { refreshMagnetic, burstLight, resetEffects, playCharge, playRip, playImpact, playSuspense, playReveal } from './effects.js?v=3';
+import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=4';
+import { boxMarkup } from './box3d.js?v=4';
+import { refreshMagnetic, burstLight, resetEffects, playCharge, playRip, playImpact, playSuspense, playReveal } from './effects.js?v=4';
 
 const $ = (selector) => document.querySelector(selector);
 const scene = $('#scene');
@@ -27,12 +28,13 @@ for (const pack of PACK_SETS) {
 }
 let collectionUnlocked = [...countsByPack.values()].some((counts)=>counts.some((count)=>count>0));
 const getCounts = (pack=activePack) => countsByPack.get(pack.id);
-const stable = () => ['bundles','sealed','revealed','collection'].includes(phase);
+const stable = () => ['bundles','packs','sealed','revealed','collection'].includes(phase);
 
 function setPhase(next) { phase=next;scene.dataset.phase=next; }
 function setView(next) { view=next;scene.dataset.view=next; }
 function syncNavigation() {
-  $('#result-actions').hidden = !stable() || (view==='bundles' && !collectionUnlocked);
+  $('#result-actions').hidden = !stable() || view==='packs' || (view==='bundles' && !collectionUnlocked);
+  $('#pack-list-open').hidden = !stable() || view==='packs';
   $('#card-list').hidden = !collectionUnlocked;
   $('#card-list').setAttribute('aria-expanded',String(view==='collection'));
   $('#save-card').hidden = view!=='result' || !selectedCard || phase!=='revealed';
@@ -59,35 +61,34 @@ function loadCard(card) {
 }
 
 function renderBundles() {
-  $('#bundle-stage').innerHTML=PACK_SETS.map((pack)=>`<button class="bundle-choice" data-pack="${escapeHTML(pack.id)}" aria-label="${escapeHTML(pack.label)} 꾸러미 선택"><span class="bundle-float"><span class="bundle-tilt" data-magnetic data-base="-2"><img src="${escapeHTML(pack.boxImage)}" alt="${escapeHTML(pack.label)} 미개봉 카드 꾸러미" width="1254" height="1254" draggable="false"></span></span>${PACK_SETS.length>1?`<span class="bundle-label">${escapeHTML(pack.label)}</span>`:''}</button>`).join('');
+  $('#bundle-stage').innerHTML=PACK_SETS.map((pack)=>`<button class="bundle-choice" data-pack="${escapeHTML(pack.id)}" aria-label="${escapeHTML(pack.label)} 꾸러미 선택"><span class="bundle-float"><span class="bundle-tilt" data-magnetic data-base="-2">${boxMarkup(pack,escapeHTML)}</span></span>${PACK_SETS.length>1?`<span class="bundle-label">${escapeHTML(pack.label)}</span>`:''}</button>`).join('');
   refreshMagnetic();
 }
 function selectPack(packId) {
-  if(phase!=='bundles')return;
+  if(phase!=='bundles' && phase!=='packs')return;
   const pack=PACK_SETS.find((item)=>item.id===packId);if(!pack)return;
+  const fromList=phase==='packs',stage=fromList ? $('#pack-list') : $('#bundle-stage');
   activePack=pack;collectionPackId=pack.id;cancelPending();setPhase('selecting');syncNavigation();
-  document.querySelectorAll('.bundle-choice').forEach((button)=>button.disabled=true);
-  $('#bundle-stage').classList.add('departing');
+  document.querySelectorAll('.bundle-choice,.pack-pick').forEach((button)=>button.disabled=true);
+  stage.classList.add('departing');
   document.querySelectorAll('.packet-layer img').forEach((image)=>image.src=pack.wrapperImage);
   packButton.setAttribute('aria-label',`${pack.label} 밀봉 카드팩 뜯기`);
   later(()=>{
-    $('#bundle-stage').hidden=true;$('#bundle-stage').classList.remove('departing');
+    stage.hidden=true;stage.classList.remove('departing');
     $('#pack-position').hidden=false;$('#pack-position').classList.add('pack-arriving');
     setView('pack');setPhase('sealed');packButton.disabled=false;syncNavigation();refreshMagnetic();
     packButton.focus({preventScroll:true});
     later(()=>$('#pack-position').classList.remove('pack-arriving'),700);
-  },reducedMotion.matches?30:650);
+  },reducedMotion.matches?30:fromList?280:650);
 }
 
-function buildMysteryCard() {
-  $('#reveal-zone').innerHTML=`<div class="card-entrance"><div class="card-magnetic" data-magnetic><div class="card-flipper"><div class="card-face card-front"><div class="card-surface"></div></div><div class="card-face card-back" aria-label="아직 공개되지 않은 카드 뒷면"><span class="back-brand">${escapeHTML(activePack.brand)}</span><span class="back-sigil" aria-hidden="true">✦</span><span class="back-edition">${escapeHTML(activePack.edition)}</span></div></div></div></div>`;
+function buildCard(preview=false) {
+  $('#reveal-zone').innerHTML=`<div class="card-entrance"><div class="card-magnetic" data-magnetic><div class="card-surface"><span class="foil" aria-hidden="true"></span><span class="specular" aria-hidden="true"></span>${preview?'':'<span class="emerge-glare" aria-hidden="true"></span>'}</div></div></div>`;
   $('#reveal-zone').hidden=false;
 }
 function fillCardFront(card,image) {
-  const surface=$('#reveal-zone .card-surface');
   image.id='revealed-image';image.alt=`${card.name} SSS 카드`;image.width=756;image.height=1056;image.draggable=false;
-  surface.replaceChildren(image);
-  surface.insertAdjacentHTML('beforeend','<span class="foil" aria-hidden="true"></span><span class="specular" aria-hidden="true"></span><span class="reveal-sweep" aria-hidden="true"></span>');
+  $('#reveal-zone .card-surface').prepend(image);
   selectedCard={packId:activePack.id,card};
   $('#save-card').href=card.image;$('#save-card').download=`${card.name}_SSS.png`;
 }
@@ -96,12 +97,12 @@ function revealCard(card,image) {
   const counts=getCounts(),index=activePack.cards.findIndex((item)=>item.id===card.id),isNew=counts[index]===0;
   counts[index]++;collectionUnlocked=true;
   try{localStorage.setItem(activePack.storageKey,JSON.stringify({version:1,counts}));}catch{/* Download remains available without storage. */}
-  burstLight(1.25);playReveal();
+  burstLight(.7);playReveal();
   later(()=>{
     setPhase('revealed');setView('result');$('#pack-position').hidden=true;packButton.removeAttribute('aria-busy');
     syncNavigation();$('#announcement').textContent=`${card.name} SSS 카드가 나타났습니다.${isNew?' 처음 만난 카드입니다.':''}`;
     $('#card-list').focus({preventScroll:true});refreshMagnetic();
-  },reducedMotion.matches?60:2300);
+  },reducedMotion.matches?60:1500);
 }
 async function openPack() {
   if(phase!=='sealed')return;
@@ -113,10 +114,10 @@ async function openPack() {
     $('#pack-position').classList.remove('pack-arriving');
     setPhase('charging');scene.classList.add('charging');playCharge();refreshMagnetic();
     later(()=>{setPhase('tearing');scene.classList.remove('charging');scene.classList.add('torn');playRip();burstLight(.18);},reducedMotion.matches?20:900);
-    later(()=>{setPhase('opening');scene.classList.add('releasing');burstLight(.85);playImpact();},reducedMotion.matches?50:2500);
+    later(()=>{setPhase('opening');scene.classList.add('releasing');burstLight(.6);playImpact();},reducedMotion.matches?50:2500);
     later(()=>{
-      setPhase('emerging');setView('result');buildMysteryCard();playSuspense();
-      later(()=>revealCard(card,image),reducedMotion.matches?30:2200);
+      setPhase('emerging');setView('result');buildCard();playSuspense();
+      later(()=>revealCard(card,image),reducedMotion.matches?30:1000);
     },reducedMotion.matches?80:2950);
   }catch{
     if(token!==sequence)return;
@@ -129,6 +130,7 @@ function clearStage() {
   cancelPending();selectedCard=null;
   $('#reveal-zone').hidden=true;$('#reveal-zone').replaceChildren();
   $('#collection-panel').hidden=true;$('#collection-grid').replaceChildren();
+  $('#pack-list').hidden=true;$('#pack-list').classList.remove('departing');$('#pack-grid').replaceChildren();
   $('#pack-position').hidden=true;$('#pack-position').classList.remove('pack-arriving');
   $('#save-card').removeAttribute('href');$('#save-card').removeAttribute('download');
   $('#announcement').textContent='';$('#message').textContent='';
@@ -152,6 +154,20 @@ function nextPack() {
   syncNavigation();refreshMagnetic();packButton.focus({preventScroll:true});
 }
 
+function renderPackList() {
+  $('#pack-list-note').textContent=`출시 ${PACK_SETS.length} · 준비 중 ${UPCOMING_PACKS.length}`;
+  $('#pack-grid').innerHTML=PACK_SETS.map((pack)=>{
+    const owned=getCounts(pack).filter((n)=>n>0).length;
+    return `<button class="pack-pick" data-pick-pack="${escapeHTML(pack.id)}" aria-label="${escapeHTML(pack.label)} 선택, 수집 ${owned} / ${pack.cards.length}"><span class="pack-pick-art"><img src="${escapeHTML(pack.boxImage)}" alt="" width="1254" height="1254" draggable="false"></span><span class="pack-pick-name">${escapeHTML(pack.label)}</span><span class="pack-pick-count">수집 ${owned} / ${pack.cards.length}</span><span class="pack-pick-cta">선택</span></button>`;
+  }).join('')+UPCOMING_PACKS.map((soon)=>`<div class="pack-soon" role="group" aria-disabled="true" aria-label="${escapeHTML(soon.label)}, 출시 예정"><span class="pack-soon-art" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg></span><span class="pack-soon-name">COMING SOON</span><span class="pack-soon-sub">${escapeHTML(soon.label)}</span></div>`).join('');
+}
+function showPacks() {
+  if(!stable() || phase==='packs')return;
+  clearStage();setPhase('packs');setView('packs');renderPackList();
+  $('#pack-list').hidden=false;$('#pack-list').scrollTop=0;syncNavigation();refreshMagnetic();
+  $('#pack-list-title').focus({preventScroll:true});
+}
+
 function renderCollection(pack) {
   const counts=getCounts(pack),owned=counts.filter((n)=>n>0).length;
   $('#collection-count').textContent=`${owned} / ${pack.cards.length}`;
@@ -167,7 +183,7 @@ function showCollection(packId=activePack.id) {
   if(!collectionUnlocked || !stable())return;
   const pack=PACK_SETS.find((item)=>item.id===packId);if(!pack)return;
   cancelPending();collectionPackId=pack.id;activePack=pack;
-  $('#bundle-stage').hidden=true;$('#pack-position').hidden=true;$('#reveal-zone').hidden=true;$('#reveal-zone').replaceChildren();
+  $('#bundle-stage').hidden=true;$('#pack-list').hidden=true;$('#pack-position').hidden=true;$('#reveal-zone').hidden=true;$('#reveal-zone').replaceChildren();
   scene.classList.remove('charging','torn','releasing','unveiling','previewing');
   setPhase('collection');setView('collection');resetEffects();renderCollection(pack);
   $('#collection-panel').hidden=false;$('#collection-panel').scrollTop=0;$('#message').textContent='';syncNavigation();
@@ -181,7 +197,7 @@ async function inspectOwnedCard(packId,cardId) {
   setPhase('inspecting');$('#collection-grid').setAttribute('aria-busy','true');syncNavigation();
   try{
     const image=await loadCard(card);if(token!==sequence)return;
-    activePack=pack;buildMysteryCard();fillCardFront(card,image);scene.classList.add('previewing','unveiling');
+    activePack=pack;buildCard(true);fillCardFront(card,image);scene.classList.add('previewing');
     $('#collection-panel').hidden=true;$('#collection-grid').replaceChildren();
     setPhase('revealed');setView('result');syncNavigation();refreshMagnetic();
     $('#announcement').textContent=`${card.name} SSS 카드, ${getCounts(pack)[index]}장 보유.`;$('#card-list').focus({preventScroll:true});
@@ -194,6 +210,8 @@ $('#bundle-stage').addEventListener('click',(event)=>{const button=event.target.
 packButton.addEventListener('click',openPack);
 $('#next-pack').addEventListener('click',nextPack);
 $('#choose-bundle').addEventListener('click',showBundles);
+$('#pack-list-open').addEventListener('click',showPacks);
+$('#pack-grid').addEventListener('click',(event)=>{const button=event.target.closest('[data-pick-pack]');if(button)selectPack(button.dataset.pickPack);});
 $('#card-list').addEventListener('click',()=>showCollection(collectionPackId));
 $('#pack-tabs').addEventListener('click',(event)=>{const button=event.target.closest('[data-collection-pack]');if(button)showCollection(button.dataset.collectionPack);});
 $('#collection-grid').addEventListener('click',(event)=>{const button=event.target.closest('[data-owned-card]');if(button)inspectOwnedCard(button.dataset.ownedPack,button.dataset.ownedCard);});

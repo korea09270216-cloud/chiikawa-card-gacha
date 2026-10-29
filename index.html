@@ -7,9 +7,10 @@
   <meta name="description" content="우주 속 카드 꾸러미를 고르고, 밀봉 팩을 뜯어 숨겨진 카드를 만나보세요.">
   <title>CHIIKAWA — SECRET PACK</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23000'/%3E%3Cpath d='M32 8 38 26 56 32 38 38 32 56 26 38 8 32 26 26Z' fill='%23e7ca82'/%3E%3C/svg%3E">
-  <link rel="preload" href="assets/secret-box.png" as="image">
-  <link rel="stylesheet" href="styles.css?v=3">
-  <script src="app.js?v=3" type="module"></script>
+  <link rel="preload" href="assets/box-front.webp" as="image">
+  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="box3d.css?v=4">
+  <script src="app.js?v=4" type="module"></script>
 </head>
 <body>
   <main id="scene" data-phase="bundles" data-view="bundles" aria-label="우주 속 카드 꾸러미와 카드팩">
@@ -19,6 +20,7 @@
     <div class="light-bloom" aria-hidden="true"></div>
     <div class="shockwave" aria-hidden="true"></div>
     <button id="choose-bundle" class="quiet-button bundle-back" hidden><span aria-hidden="true">←</span> 꾸러미 선택</button>
+    <button id="pack-list-open" class="quiet-button pack-list-link" aria-controls="pack-list" hidden>카드팩 목록 <span aria-hidden="true">▤</span></button>
     <section id="bundle-stage" aria-label="카드 꾸러미 선택"></section>
     <div class="pack-position" id="pack-position" hidden>
       <div class="pack-float">
@@ -33,6 +35,12 @@
         </button>
       </div>
     </div>
+    <section id="pack-list" aria-labelledby="pack-list-title" hidden>
+      <div class="collection-inner">
+        <div class="collection-heading"><h2 id="pack-list-title" tabindex="-1">카드팩 목록</h2><p id="pack-list-note"></p></div>
+        <div id="pack-grid"></div>
+      </div>
+    </section>
     <div id="reveal-zone" hidden></div>
     <section id="collection-panel" aria-labelledby="collection-title" hidden>
       <div class="collection-inner">

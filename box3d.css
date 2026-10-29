@@ -1,0 +1,59 @@
+/* 3D bundle box + fixed-light reflection polish. Loaded after styles.css. */
+
+/* ---------- Bundle box: a real CSS cuboid ---------- */
+/* Face proportions come from the rectified render: front 720x1046, depth 352 (W : H : D = 1 : 1.4528 : .4889). */
+.bundle-choice{--bw:min(300px,60vw,42svh);--bh:calc(var(--bw)*1.4528);--bd:calc(var(--bw)*.4889);width:calc(var(--bw)*1.25)}
+.bundle-float{display:flex;justify-content:center}
+/* effects.js rewrites this element's inline transform every frame; perspective() is the fallback
+   for the frames it does not run (reduced motion, hidden tab). Its filter would flatten the 3D chain. */
+.bundle-tilt{position:relative;flex:0 0 auto;width:var(--bw);height:var(--bh);transform:perspective(1000px);transform-style:preserve-3d;filter:none}
+/* The pose lives here (yaw shows the left side, pitch shows the top) plus a slow idle sway so touch
+   devices see thickness without a pointer. */
+.box3d{position:absolute;inset:0;display:block;transform-style:preserve-3d;transform:rotateX(-18deg) rotateY(25deg);animation:box3d-sway 9s ease-in-out infinite;will-change:transform}
+.bx-face{position:absolute;display:block;backface-visibility:hidden;-webkit-backface-visibility:hidden;background-size:100% 100%;background-repeat:no-repeat;background-color:#07060d;overflow:hidden}
+/* Every face overlaps its neighbours by .5px so seams never show a hairline gap. */
+.bx-front,.bx-back{left:-.5px;top:-.5px;width:calc(var(--bw) + 1px);height:calc(var(--bh) + 1px)}
+.bx-left,.bx-right{left:calc(50% - var(--bd)/2 - .5px);top:-.5px;width:calc(var(--bd) + 1px);height:calc(var(--bh) + 1px)}
+.bx-top,.bx-bottom{left:-.5px;top:calc(50% - var(--bd)/2 - .5px);width:calc(var(--bw) + 1px);height:calc(var(--bd) + 1px)}
+.bx-front{transform:translateZ(calc(var(--bd)/2));background-image:linear-gradient(120deg,#0000 55%,#0006),var(--bx-front,url(assets/box-front.webp));box-shadow:inset 1.5px 1.5px 0 #ffe9b957,inset -1px -1px 0 #edce8728}
+.bx-back{transform:rotateY(180deg) translateZ(calc(var(--bd)/2));background-image:var(--bx-back,linear-gradient(#10101c,#07060d))}
+/* Fixed light from the upper left: the left side falls into shadow, the top catches a little light. */
+.bx-left{transform:rotateY(-90deg) translateZ(calc(var(--bw)/2));background-image:linear-gradient(90deg,#02020acc,#02020a70),var(--bx-left,url(assets/box-left.webp));box-shadow:inset 1px 0 0 #edce8733,inset 0 1px 0 #ffe9b940}
+.bx-right{transform:rotateY(90deg) translateZ(calc(var(--bw)/2));background-image:linear-gradient(90deg,#02020a99,#02020ae6),var(--bx-right,url(assets/box-right.webp))}
+.bx-top{transform:rotateX(90deg) translateZ(calc(var(--bh)/2));background-image:linear-gradient(0deg,#0000,#02020a73),var(--bx-top,url(assets/box-top.webp));box-shadow:inset 0 -1.5px 0 #ffe9b96b,inset 1px 0 0 #edce8740}
+.bx-bottom{transform:rotateX(-90deg) translateZ(calc(var(--bh)/2));background-image:linear-gradient(#0a0914,#050409)}
+
+/* Cellophane sheen on the front: a wide faint wash + a thin warm core on a fixed light. effects.js drives
+   --reflection-x from the box orientation; the sway keyframes move it on touch devices. */
+.bx-gloss{position:absolute;inset:0;display:block;pointer-events:none;mix-blend-mode:screen;translate:calc((var(--reflection-x,50%) - 50%)*.42) 0;animation:box3d-glint 9s ease-in-out infinite;
+  background:
+    linear-gradient(104deg,transparent 47.2%,#ffd99633 48.8%,#fff0cd47 50%,#ffd99633 51.2%,transparent 52.8%),
+    linear-gradient(104deg,transparent 22%,#ffd89610 38%,#ffe4ae26 50%,#ffd89610 62%,transparent 78%)}
+
+/* Contact shadow / underglow behind the box (a filter would flatten the 3D chain, so it's a plain gradient). */
+.bx-floor{position:absolute;left:50%;bottom:calc(var(--bw)*-.2);width:calc(var(--bw)*1.35);height:calc(var(--bw)*.3);transform:translate3d(-50%,0,calc(var(--bd)*-.7));pointer-events:none;background:radial-gradient(ellipse at 50% 45%,#000 0 30%,#5a46a72e 52%,#0000 72%)}
+
+@keyframes box3d-sway{0%,100%{transform:rotateX(-18deg) rotateY(19deg)}50%{transform:rotateX(-16deg) rotateY(31deg)}}
+@keyframes box3d-glint{0%,100%{transform:translateX(-30%)}50%{transform:translateX(30%)}}
+
+/* ---------- Card: restrained, fixed-light straight metallic strip ---------- */
+/* A fixed studio strip light: only the card's orientation (via --reflection-x) slides the straight reflection;
+   pointer coordinates are never used. All layers stay inside .card-surface (it clips them). */
+.card-surface .specular,.card-surface .foil{position:absolute;inset:0;pointer-events:none;border-radius:inherit;--spec-pos:calc(50% + (var(--reflection-x,50%) - 50%)*.8)}
+.card-surface .specular{opacity:1;mix-blend-mode:normal;background:none}
+/* broad, very faint wash + a hairline on the core (screen, low alpha: never reaches white) */
+.card-surface .specular:before{content:'';position:absolute;inset:0;border-radius:inherit;mix-blend-mode:screen;
+  background:
+    linear-gradient(108deg,transparent calc(var(--spec-pos) - .9%),#ffdc9a3d calc(var(--spec-pos) - .25%),#ffe6b047 var(--spec-pos),#ffdc9a3d calc(var(--spec-pos) + .25%),transparent calc(var(--spec-pos) + .9%)),
+    linear-gradient(108deg,transparent calc(var(--spec-pos) - 22%),#ffd78614 calc(var(--spec-pos) - 8%),#ffe0a01f var(--spec-pos),#ffd78614 calc(var(--spec-pos) + 8%),transparent calc(var(--spec-pos) + 22%))}
+/* narrow warm-gold strip + a faint echo line; soft-light barely lifts already-bright pixels, so artwork never washes out */
+.card-surface .specular:after{content:'';position:absolute;inset:0;border-radius:inherit;mix-blend-mode:soft-light;
+  background:
+    linear-gradient(108deg,transparent calc(var(--spec-pos) - 5%),#ffc85a30 calc(var(--spec-pos) - 2.4%),#ffe09ab8 calc(var(--spec-pos) - .7%),#fff3cf var(--spec-pos),#ffe09ab8 calc(var(--spec-pos) + .7%),#ffc85a30 calc(var(--spec-pos) + 2.4%),transparent calc(var(--spec-pos) + 5%)),
+    linear-gradient(108deg,transparent calc(var(--spec-pos) + 5.4%),#ffd98a78 calc(var(--spec-pos) + 6.6%),transparent calc(var(--spec-pos) + 7.8%))}
+.card-surface .foil{opacity:.08;mix-blend-mode:screen;background:repeating-linear-gradient(115deg,transparent 0,#5affdd 15%,#e5a8ff 25%,#ffdb7b 35%,transparent 50%);background-size:260% 260%;background-position:var(--spec-pos) 50%}
+
+@media(prefers-reduced-motion:reduce){
+  .box3d,.bx-gloss{animation:none}
+  .card-surface .specular{opacity:.5}
+}

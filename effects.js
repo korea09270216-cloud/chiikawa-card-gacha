@@ -47,7 +47,7 @@ function updateMotion(time) {
     state.el.classList.toggle('influenced',strength>.01);
     // A fixed studio strip light: the reflection changes with surface orientation,
     // never with pointer coordinates. Idle yaw also sweeps it on touch devices.
-    state.el.style.setProperty('--reflection-x',`${(50+state.ry*8.5+state.rx*3).toFixed(2)}%`);
+    state.el.style.setProperty('--reflection-x',`${(50+state.ry*4.5+state.rx*2).toFixed(2)}%`);
   }
   motionFrame=requestAnimationFrame(updateMotion);
 }
