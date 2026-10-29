@@ -1,208 +1,184 @@
-// Proximity motion follows the supplied magnetic-field playbook:
-// direction × maximum angle × clamp(1 - distance / radius, 0, 1).
-const finePointer = matchMedia('(min-width: 600px) and (hover: hover) and (pointer: fine)');
-const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-let enabled = !reducedMotion.matches;
+const scene = document.querySelector('#scene');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
 let pointer = {x:-10000,y:-10000};
-let states = [];
+let magnets = [];
 let motionFrame = 0;
-let previousTime = 0;
-let lightControl = null;
-const lerp = (a,b,t) => a+(b-a)*t;
+let lastMotion = 0;
+let burstAt = -10000;
+let burstPower = 0;
+let particles = [];
+let audio;
 
 export function refreshMagnetic() {
-  const previous = new Map(states.map((state) => [state.el,state]));
-  states = [...document.querySelectorAll('[data-magnetic]')].map((el,index) => previous.get(el) || {el,index,base:Number(el.dataset.base || 0),x:0,y:0,rx:0,ry:0,rz:0});
-  settlePointer();
+  const previous = new Map(magnets.map((state) => [state.el,state]));
+  magnets = [...document.querySelectorAll('[data-magnetic]')].map((el) => previous.get(el) || {el,base:Number(el.dataset.base||0),rx:0,ry:0,lift:0,rotation:0});
+  pointer = {x:-10000,y:-10000};
   startMotion();
 }
 
-function resetTransforms() {
-  states.forEach((state) => {
-    state.x = state.y = state.rx = state.ry = state.rz = 0;
-    state.el.style.removeProperty('transform');
-    state.el.style.removeProperty('--shine-x');
-    state.el.style.removeProperty('--shine-y');
-    state.el.classList.remove('influenced');
-  });
-}
-
-export function setEffectsEnabled(value) {
-  enabled = value;
-  if (!enabled || reducedMotion.matches) {
-    cancelAnimationFrame(motionFrame);
-    motionFrame = 0;
-    resetTransforms();
-  } else startMotion();
-  lightControl?.sync();
-}
-
-function settlePointer() { pointer = {x:-10000,y:-10000}; }
-window.addEventListener('pointermove',(event) => { if (event.pointerType !== 'touch') pointer = {x:event.clientX,y:event.clientY}; },{passive:true});
-window.addEventListener('scroll',settlePointer,{passive:true});
-window.addEventListener('blur',settlePointer);
-document.addEventListener('mouseleave',settlePointer);
-
 function startMotion() {
-  if (!motionFrame && enabled && finePointer.matches && !reducedMotion.matches && !document.hidden) {
-    previousTime = performance.now();
-    motionFrame = requestAnimationFrame(animateMotion);
-  }
+  if (motionFrame || reduceMotion.matches || !finePointer.matches || document.hidden) return;
+  lastMotion=performance.now();
+  motionFrame=requestAnimationFrame(updateMotion);
 }
 
-function animateMotion(time) {
-  motionFrame = 0;
-  if (!enabled || !finePointer.matches || reducedMotion.matches || document.hidden) return;
-  const dt = Math.min((time-previousTime)/1000,.05);
-  previousTime = time;
-  const openDialog = document.querySelector('dialog[open]');
-  const measurements = states.map((state) => ({state,rect:state.el.getBoundingClientRect()}));
-  for (const {state,rect} of measurements) {
-    const el = state.el;
-    if (rect.height === 0 || rect.bottom < -60 || rect.top > innerHeight + 60) continue;
-    // Reveal and proximity never compete for the same transform.
-    if (el.closest('.revealing')) continue;
-    const dx = pointer.x-(rect.left+rect.width/2);
-    const dy = pointer.y-(rect.top+rect.height/2);
-    const distance = Math.hypot(dx,dy);
-    const radius = el.classList.contains('stage-card') ? 380 : Math.max(180,rect.width*1.65);
-    const strength = openDialog && !openDialog.contains(el) ? 0 : Math.max(0,Math.min(1,1-distance/radius));
-    const ux = distance ? dx/distance : 0;
-    const uy = distance ? dy/distance : 0;
-    const influenced = strength > 0;
-    const approach = 1-Math.exp(-dt/(influenced ? .10 : .15));
-    const idle = el.classList.contains('stage-card') ? Math.sin(time/1250+state.index*1.3)*3 : 0;
-    state.y = lerp(state.y,influenced ? -8*strength : idle,approach);
-    state.rx = lerp(state.rx,-uy*9*strength,approach);
-    state.ry = lerp(state.ry,ux*11*strength,approach);
-    state.rz = lerp(state.rz,ux*3*strength,approach);
-    el.style.transform = `perspective(900px) translateY(${state.y.toFixed(2)}px) rotateX(${state.rx.toFixed(2)}deg) rotateY(${state.ry.toFixed(2)}deg) rotateZ(${(state.base+state.rz).toFixed(2)}deg)`;
-    el.classList.toggle('influenced',influenced);
-    if (influenced) {
-      el.style.setProperty('--shine-x',`${Math.max(0,Math.min(100,(pointer.x-rect.left)/rect.width*100))}%`);
-      el.style.setProperty('--shine-y',`${Math.max(0,Math.min(100,(pointer.y-rect.top)/rect.height*100))}%`);
+function updateMotion(time) {
+  motionFrame=0;
+  if (reduceMotion.matches || !finePointer.matches || document.hidden) return;
+  const dt=Math.min(.05,(time-lastMotion)/1000);lastMotion=time;
+  const measurements=magnets.map((state)=>({state,rect:state.el.getBoundingClientRect()}));
+  for(const {state,rect} of measurements){
+    if(!rect.width || !rect.height)continue;
+    const dx=pointer.x-(rect.left+rect.width/2),dy=pointer.y-(rect.top+rect.height/2);
+    const distance=Math.hypot(dx,dy),radius=Math.max(260,rect.width*1.7);
+    const active=['sealed','revealed'].includes(scene.dataset.phase);
+    const strength=active ? Math.max(0,1-distance/radius) : 0;
+    const ux=distance?dx/distance:0,uy=distance?dy/distance:0;
+    const ease=1-Math.exp(-dt/(strength>.01?.1:.16));
+    state.rx+=(-uy*10*strength-state.rx)*ease;
+    state.ry+=(ux*12*strength-state.ry)*ease;
+    state.rotation+=(ux*3*strength-state.rotation)*ease;
+    state.lift+=(-7*strength-state.lift)*ease;
+    state.el.style.transform=`perspective(1000px) translateY(${state.lift.toFixed(2)}px) rotateX(${state.rx.toFixed(2)}deg) rotateY(${state.ry.toFixed(2)}deg) rotateZ(${(state.base+state.rotation).toFixed(2)}deg)`;
+    state.el.classList.toggle('influenced',strength>.01);
+    if(strength>0){
+      state.el.style.setProperty('--shine-x',`${Math.max(0,Math.min(100,(pointer.x-rect.left)/rect.width*100))}%`);
+      state.el.style.setProperty('--shine-y',`${Math.max(0,Math.min(100,(pointer.y-rect.top)/rect.height*100))}%`);
     }
   }
-  motionFrame = requestAnimationFrame(animateMotion);
+  motionFrame=requestAnimationFrame(updateMotion);
 }
+function settle(){pointer={x:-10000,y:-10000};}
+function stopMotion(){cancelAnimationFrame(motionFrame);motionFrame=0;magnets.forEach((s)=>{s.el.style.removeProperty('transform');s.el.classList.remove('influenced');s.rx=s.ry=s.rotation=s.lift=0;});}
+window.addEventListener('pointermove',(event)=>{if(event.pointerType!=='touch')pointer={x:event.clientX,y:event.clientY};},{passive:true});
+window.addEventListener('blur',settle);
+window.addEventListener('scroll',settle,{passive:true});
+document.addEventListener('mouseleave',settle);
+finePointer.addEventListener('change',()=>{settle();finePointer.matches?startMotion():stopMotion();});
 
-finePointer.addEventListener('change',() => {
-  settlePointer();
-  if (!finePointer.matches) {cancelAnimationFrame(motionFrame);motionFrame=0;resetTransforms();}
-  else startMotion();
-});
-document.addEventListener('visibilitychange',() => {
-  settlePointer();
-  if (document.hidden) {cancelAnimationFrame(motionFrame);motionFrame=0;}
-  else startMotion();
-  lightControl?.sync();
-});
+// Only cosmetic particles use Math.random. Card selection uses crypto in app.js.
+export function burstLight(power=1){
+  burstAt=performance.now();burstPower=power;
+  if(reduceMotion.matches)return;
+  const rect=document.querySelector('#pack-position').getBoundingClientRect();
+  const x=innerWidth/2,y=power<.4?rect.top+rect.height*.106:innerHeight*.47;
+  const count=Math.round(70*power);
+  for(let i=0;i<count;i++){
+    const angle=Math.random()*Math.PI*2,speed=30+Math.random()*190*power;
+    particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,born:burstAt,life:1200+Math.random()*1500,size:.6+Math.random()*1.3});
+  }
+}
+export function resetEffects(){burstAt=-10000;burstPower=0;particles=[];settle();}
 
-// A small volumetric ray marcher, with rays integrated through a procedural
-// shaft field and an analytic ray/plane ground intersection. No hardware RTX
-// dependency: WebGL 1, 24 samples, capped resolution and 30 fps.
-function createLightRenderer() {
-  const canvas = document.querySelector('#light-canvas');
-  const gl = canvas.getContext('webgl',{alpha:true,antialias:false,powerPreference:'low-power',premultipliedAlpha:false});
-  if (!gl) return null;
-  const vertexSource = `attribute vec2 a_position;void main(){gl_Position=vec4(a_position,0.,1.);}`;
-  const fragmentSource = `
-    precision mediump float;
-    uniform vec2 u_resolution;
-    uniform float u_time;
-    uniform vec2 u_pointer;
-    float shafts(vec3 p){
-      vec3 source=vec3(0.3+u_pointer.x*0.15,5.8,0.0);
-      vec3 lightVector=p-source;
-      float angle=atan(lightVector.x,-lightVector.y);
-      float drift=u_time*0.025;
-      float streak=pow(max(0.,sin(angle*37.+drift+sin(lightVector.z*.6)*.2)),18.);
-      streak+=pow(max(0.,sin(angle*71.-drift*.7)),32.)*.35;
-      float cone=1.-smoothstep(.10,.60,abs(angle-.22));
-      float depth=exp(-abs(p.z)*.20);
-      float dust=.8+.2*sin(p.x*1.8+p.y*2.1+p.z*.7+u_time*.12);
-      return streak*cone*depth*dust;
+function createRayRenderer(){
+  const canvas=document.querySelector('#light-canvas');
+  const gl=canvas.getContext('webgl',{alpha:false,antialias:false,powerPreference:'low-power'});
+  if(!gl)return null;
+  const vertex='attribute vec2 a_position;void main(){gl_Position=vec4(a_position,0.,1.);}';
+  const fragment=`precision mediump float;
+    uniform vec2 u_resolution;uniform float u_time;uniform float u_power;
+    float volume(vec3 p){
+      float r=length(p.xy);float angle=atan(p.y,p.x);
+      float streak=pow(max(0.,sin(angle*18.+sin(p.z*.7)+u_time*.12)),12.);
+      streak+=pow(max(0.,sin(angle*31.-u_time*.07)),24.)*.4;
+      float haze=exp(-r*r*1.6)*.15;
+      return (streak*.4*exp(-r*.9)+haze)*exp(-abs(p.z)*.55);
     }
     void main(){
-      vec2 uv=(gl_FragCoord.xy*2.-u_resolution)/u_resolution.y;
-      vec3 origin=vec3(0.,.3,7.);
-      vec3 ray=normalize(vec3(uv.x,uv.y-.05,-2.8));
-      float fog=0.;
-      float transmittance=1.;
-      for(int i=0;i<24;i++){
-        float t=2.+float(i)*.36;
-        vec3 p=origin+ray*t;
-        float density=shafts(p)*.045;
-        fog+=transmittance*density;
-        transmittance*=.975;
+      vec2 uv=(gl_FragCoord.xy*2.-u_resolution)/u_resolution.y;uv.y-=.06;
+      vec3 origin=vec3(0.,0.,4.);vec3 ray=normalize(vec3(uv,-2.));
+      float fog=0.;float transmittance=1.;
+      for(int i=0;i<20;i++){
+        vec3 p=origin+ray*(1.5+float(i)*.27);
+        fog+=volume(p)*transmittance*.12;transmittance*=.97;
       }
-      float ground=0.;
-      if(ray.y<-.01){
-        float hit=(-1.8-origin.y)/ray.y;
-        vec3 p=origin+ray*hit;
-        ground=shafts(p)*exp(-length(p.xz-vec2(1.,0.))*.65)*.15;
-      }
-      float vignette=1.-smoothstep(.6,1.6,length(uv*vec2(.5,.7)));
-      float mask=smoothstep(-1.,.25,uv.x);
-      vec3 gold=vec3(1.,.85,.48)*(fog*.63+ground)*vignette*mask;
-      gl_FragColor=vec4(gold,1.);
+      float edge=1.-smoothstep(.4,1.6,length(uv));
+      vec3 color=vec3(1.,.79,.4)*fog*u_power*edge;
+      gl_FragColor=vec4(color,1.);
     }`;
-  function compile(type,source) {
-    const shader = gl.createShader(type);
-    gl.shaderSource(shader,source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader,gl.COMPILE_STATUS)) {gl.deleteShader(shader);return null;}
-    return shader;
-  }
-  const vertex = compile(gl.VERTEX_SHADER,vertexSource);
-  const fragment = compile(gl.FRAGMENT_SHADER,fragmentSource);
-  if (!vertex || !fragment) return null;
-  const program = gl.createProgram();
-  gl.attachShader(program,vertex);gl.attachShader(program,fragment);gl.linkProgram(program);
-  if (!gl.getProgramParameter(program,gl.LINK_STATUS)) return null;
+  function compile(type,source){const shader=gl.createShader(type);gl.shaderSource(shader,source);gl.compileShader(shader);if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){gl.deleteShader(shader);return null;}return shader;}
+  const vs=compile(gl.VERTEX_SHADER,vertex),fs=compile(gl.FRAGMENT_SHADER,fragment);
+  if(!vs||!fs)return null;
+  const program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);
+  if(!gl.getProgramParameter(program,gl.LINK_STATUS))return null;
   gl.useProgram(program);
-  const buffer = gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
-  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
-  const position = gl.getAttribLocation(program,'a_position');
-  gl.enableVertexAttribArray(position);gl.vertexAttribPointer(position,2,gl.FLOAT,false,0,0);
-  const resolution = gl.getUniformLocation(program,'u_resolution');
-  const timeUniform = gl.getUniformLocation(program,'u_time');
-  const pointerUniform = gl.getUniformLocation(program,'u_pointer');
-  let frame = 0;
-  let lastTime = 0;
-  let visible = true;
-  let lost = false;
-  function resize() {
-    const rect = canvas.getBoundingClientRect();
-    const scale = Math.min(1,900/rect.width);
-    canvas.width = Math.max(1,Math.round(rect.width*scale));
-    canvas.height = Math.max(1,Math.round(rect.height*scale));
-    gl.viewport(0,0,canvas.width,canvas.height);
-    gl.uniform2f(resolution,canvas.width,canvas.height);
-  }
-  function render(time) {
-    frame=0;
-    if (!enabled || reducedMotion.matches || document.hidden || !visible || lost) return;
-    if (time-lastTime >= 33) {
-      lastTime=time;
-      gl.uniform1f(timeUniform,time/1000);
-      gl.uniform2f(pointerUniform,pointer.x < 0 ? 0 : pointer.x/innerWidth-.5,pointer.y < 0 ? 0 : pointer.y/innerHeight-.5);
-      gl.drawArrays(gl.TRIANGLES,0,6);
-    }
-    frame=requestAnimationFrame(render);
-  }
-  function sync() {
-    cancelAnimationFrame(frame);frame=0;
-    if (enabled && !reducedMotion.matches && !document.hidden && visible && !lost) frame=requestAnimationFrame(render);
-  }
-  new ResizeObserver(resize).observe(canvas);
-  new IntersectionObserver(([entry]) => {visible=entry.isIntersecting;sync();}).observe(canvas);
-  canvas.addEventListener('webglcontextlost',(event) => {event.preventDefault();lost=true;sync();document.body.classList.remove('has-webgl');});
-  canvas.addEventListener('webglcontextrestored',() => {location.reload();});
-  document.body.classList.add('has-webgl');
-  resize();sync();
-  return {sync};
+  const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
+  const position=gl.getAttribLocation(program,'a_position');gl.enableVertexAttribArray(position);gl.vertexAttribPointer(position,2,gl.FLOAT,false,0,0);
+  const resolution=gl.getUniformLocation(program,'u_resolution'),timeUniform=gl.getUniformLocation(program,'u_time'),powerUniform=gl.getUniformLocation(program,'u_power');
+  let lost=false,lastPower=-1;
+  canvas.addEventListener('webglcontextlost',(event)=>{event.preventDefault();lost=true;});
+  return {
+    resize(width,height){const scale=Math.min(1,850/width);canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);gl.viewport(0,0,canvas.width,canvas.height);gl.uniform2f(resolution,canvas.width,canvas.height);},
+    render(time,power){if(lost)return;if(power===0&&lastPower===0)return;lastPower=power;gl.uniform1f(timeUniform,time/1000);gl.uniform1f(powerUniform,power);gl.drawArrays(gl.TRIANGLES,0,6);}
+  };
 }
-try { lightControl = createLightRenderer(); }
-catch { document.body.classList.remove('has-webgl'); }
-refreshMagnetic();
+
+function createSpace(){
+  const canvas=document.querySelector('#space'),ctx=canvas.getContext('2d');
+  if(!ctx)return;
+  let rays=null;
+  try{rays=createRayRenderer();}catch{/* CSS bloom remains available. */}
+  let width=innerWidth,height=innerHeight,stars=[],frame=0,lastFrame=0;
+  function resize(){
+    width=innerWidth;height=innerHeight;
+    const dpr=Math.min(devicePixelRatio||1,1.5);
+    canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+    stars=Array.from({length:Math.min(150,Math.max(45,Math.round(width*height/11000)))},()=>({x:Math.random()*width,y:Math.random()*height,r:.3+Math.random()*.65,alpha:.12+Math.random()*.35,phase:Math.random()*6.28}));
+    rays?.resize(width,height);
+    draw(performance.now());
+  }
+  function draw(time){
+    ctx.clearRect(0,0,width,height);
+    for(const star of stars){
+      const flicker=reduceMotion.matches?1:.8+.2*Math.sin(time*.0005+star.phase);
+      ctx.fillStyle=`rgba(211,220,235,${star.alpha*flicker})`;
+      ctx.beginPath();ctx.arc(star.x,star.y,star.r,0,Math.PI*2);ctx.fill();
+    }
+    if(!reduceMotion.matches){
+      particles=particles.filter((p)=>time-p.born<p.life);
+      for(const p of particles){
+        const seconds=(time-p.born)/1000,alpha=Math.max(0,1-(time-p.born)/p.life);
+        const x=p.x+p.vx*seconds,y=p.y+p.vy*seconds+seconds*seconds*12;
+        ctx.fillStyle=`rgba(255,218,151,${alpha*.85})`;ctx.shadowColor='#ffd282';ctx.shadowBlur=6;
+        ctx.fillRect(x,y,p.size,p.size);ctx.shadowBlur=0;
+      }
+    }
+    const age=Math.max(0,(time-burstAt)/1000);
+    const residual=scene.dataset.phase==='revealed'?.17:0;
+    const power=reduceMotion.matches?0:Math.max(residual,burstPower*Math.exp(-age*.9)*2.2);
+    rays?.render(time,power<.005?0:power);
+  }
+  function tick(time){frame=0;if(document.hidden)return;if(time-lastFrame>33){lastFrame=time;draw(time);}if(!reduceMotion.matches)frame=requestAnimationFrame(tick);}
+  function sync(){cancelAnimationFrame(frame);frame=0;if(!document.hidden){draw(performance.now());if(!reduceMotion.matches)frame=requestAnimationFrame(tick);}}
+  window.addEventListener('resize',resize,{passive:true});
+  document.addEventListener('visibilitychange',sync);
+  reduceMotion.addEventListener('change',sync);
+  resize();sync();
+}
+try{createSpace();}catch{/* A black stage still works without canvas support. */}
+document.addEventListener('visibilitychange',()=>{settle();document.hidden?stopMotion():startMotion();});
+reduceMotion.addEventListener('change',()=>{settle();reduceMotion.matches?stopMotion():startMotion();});
+
+function getAudio(){
+  try{audio ||= new (window.AudioContext||window.webkitAudioContext)();audio.resume().catch(()=>{});return audio;}catch{return null;}
+}
+export function playRip(unlockOnly=false){
+  const ac=getAudio();if(!ac||unlockOnly)return;
+  try{
+    const length=Math.round(ac.sampleRate*.7),buffer=ac.createBuffer(1,length,ac.sampleRate),samples=buffer.getChannelData(0);
+    for(let i=0;i<length;i++){const t=i/ac.sampleRate;samples[i]=(Math.random()*2-1)*(.4+.6*Math.abs(Math.sin(t*250)));}
+    const source=ac.createBufferSource(),filter=ac.createBiquadFilter(),gain=ac.createGain();
+    source.buffer=buffer;filter.type='bandpass';filter.frequency.setValueAtTime(900,ac.currentTime);filter.frequency.exponentialRampToValueAtTime(3400,ac.currentTime+.6);filter.Q.value=.65;
+    gain.gain.setValueAtTime(0,ac.currentTime);gain.gain.linearRampToValueAtTime(.15,ac.currentTime+.06);gain.gain.setValueAtTime(.12,ac.currentTime+.5);gain.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.7);
+    source.connect(filter).connect(gain).connect(ac.destination);source.start();source.stop(ac.currentTime+.72);
+  }catch{/* Audio is optional. */}
+}
+export function playReveal(){
+  const ac=getAudio();if(!ac)return;
+  try{[392,587.33,783.99,1174.66].forEach((frequency,i)=>{
+    const at=ac.currentTime+i*.11,osc=ac.createOscillator(),gain=ac.createGain();osc.type='sine';osc.frequency.value=frequency;
+    gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.035,at+.035);gain.gain.exponentialRampToValueAtTime(.0001,at+1.6);
+    osc.connect(gain).connect(ac.destination);osc.start(at);osc.stop(at+1.65);
+  });}catch{/* Audio is optional. */}
+}

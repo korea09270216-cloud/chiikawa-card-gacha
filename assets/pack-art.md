@@ -1,0 +1,9 @@
+# 시크릿 팩 이미지 제작 기록
+
+파일: `assets/secret-pack.png` — 948 × 1659 RGBA PNG.
+
+제작 방법: 내장 `image_gen.imagegen`, `transparent_background: true`. 생성 결과를 그대로 복사해 사용했고, 원본 카드 그림은 수정하지 않았습니다. 포장지 분리와 찢김은 CSS clip-path 및 transform으로 처리합니다.
+
+최종 프롬프트:
+
+> Create a production-ready isolated game asset: ONE sealed trading-card booster foil wrapper, upright and front-facing, no perspective, centered and filling nearly the full height, full object visible, on a genuinely transparent background. A tactile, premium Japanese collectible-card packet, aspect ratio of the packet about 0.57 wide to 1 tall. Photoreal metallic midnight-black foil with rich gold, iridescent violet and blue fine highlights, visible realistic foil wrinkles, silver-gold vertically ribbed crimp seals across top and bottom, sharp square corners. The outer silhouette should be nearly rectangular, not a rounded playing card. Artwork on wrapper is abstract: a radiant golden four-point star in an intricate celestial magic-circle medallion, tiny constellations, luminous arcs and shards. NO characters, no animal silhouettes, no visible collectible cards, no specific card previews, no Pokemon logo. Large crisp gold-embossed exact title 'CHIIKAWA' at upper third, small exact subtitle 'SECRET PACK' below, and a tiny 'SSS' near bottom. A small mystery question mark inside the radiant central medallion. Design should feel mysterious, powerful and physical, like a real unopened booster pack suspended in space. Keep the top 12 percent as uninterrupted crimped sealed header that will be torn off by web animation, with all text/art below that. Neutral studio product lighting with luminous golden highlights on the foil, no external glow beyond silhouette, no shadow outside the object, no scenery or floor, no mockup surroundings, no extra objects. Output transparent PNG.
