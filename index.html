@@ -4,26 +4,29 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
-  <meta name="description" content="검은 우주, 밀봉된 카드팩 하나. 클릭해서 안에 숨겨진 카드를 만나보세요.">
+  <meta name="description" content="우주 속 카드 꾸러미를 고르고, 밀봉 팩을 뜯어 숨겨진 카드를 만나보세요.">
   <title>CHIIKAWA — SECRET PACK</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23000'/%3E%3Cpath d='M32 8 38 26 56 32 38 38 32 56 26 38 8 32 26 26Z' fill='%23e7ca82'/%3E%3C/svg%3E">
-  <link rel="preload" href="assets/secret-pack.png" as="image">
-  <link rel="stylesheet" href="styles.css?v=2">
-  <script src="app.js?v=2" type="module"></script>
+  <link rel="preload" href="assets/secret-box.png" as="image">
+  <link rel="stylesheet" href="styles.css?v=3">
+  <script src="app.js?v=3" type="module"></script>
 </head>
 <body>
-  <main id="scene" data-phase="sealed" aria-label="우주 속 미개봉 카드팩">
+  <main id="scene" data-phase="bundles" data-view="bundles" aria-label="우주 속 카드 꾸러미와 카드팩">
     <canvas id="space" aria-hidden="true"></canvas>
     <canvas id="light-canvas" aria-hidden="true"></canvas>
     <div class="radiance" aria-hidden="true"></div>
     <div class="light-bloom" aria-hidden="true"></div>
     <div class="shockwave" aria-hidden="true"></div>
-    <div class="pack-position" id="pack-position">
+    <div class="prism-flare" aria-hidden="true"></div>
+    <button id="choose-bundle" class="quiet-button bundle-back" hidden><span aria-hidden="true">←</span> 꾸러미 선택</button>
+    <section id="bundle-stage" aria-label="카드 꾸러미 선택"></section>
+    <div class="pack-position" id="pack-position" hidden>
       <div class="pack-float">
         <button id="pack-button" aria-label="밀봉된 치이카와 카드팩 뜯기" aria-describedby="pack-instruction">
           <span class="pack-tilt" data-magnetic data-base="-4">
-            <span class="packet-layer pack-lower"><img src="assets/secret-pack.png" width="948" height="1659" alt="미개봉 치이카와 시크릿 카드팩" draggable="false" fetchpriority="high"></span>
-            <span class="packet-layer pack-cap" aria-hidden="true"><img src="assets/secret-pack.png" width="948" height="1659" alt="" draggable="false"></span>
+            <span class="packet-layer pack-lower"><img width="948" height="1659" alt="미개봉 카드팩" draggable="false"></span>
+            <span class="packet-layer pack-cap" aria-hidden="true"><img width="948" height="1659" alt="" draggable="false"></span>
             <span class="pack-glint" aria-hidden="true"></span>
             <span class="tear-light" aria-hidden="true"></span>
             <span class="tear-spark" aria-hidden="true"></span>
@@ -32,9 +35,18 @@
       </div>
     </div>
     <div id="reveal-zone" hidden></div>
+    <section id="collection-panel" aria-labelledby="collection-title" hidden>
+      <div class="collection-inner">
+        <div class="collection-heading"><h2 id="collection-title" tabindex="-1">카드 목록</h2><p id="collection-count"></p></div>
+        <div id="pack-tabs" role="group" aria-label="카드팩별 목록"></div>
+        <p id="collection-summary"></p>
+        <div id="collection-grid"></div>
+      </div>
+    </section>
     <div id="result-actions" hidden>
-      <button id="next-pack" class="quiet-button">한 팩 더 <span aria-hidden="true">↻</span></button>
-      <a id="save-card" class="quiet-button" download>카드 저장 <span aria-hidden="true">↓</span></a>
+      <button id="card-list" class="quiet-button" aria-controls="collection-panel" aria-expanded="false">카드 목록 <span aria-hidden="true">▦</span></button>
+      <button id="next-pack" class="quiet-button">카드뽑기 <span aria-hidden="true">↻</span></button>
+      <a id="save-card" class="quiet-button" download hidden>카드 저장 <span aria-hidden="true">↓</span></a>
     </div>
     <p id="pack-instruction" class="sr-only">클릭하거나 Enter 키를 누르면 팩이 뜯어지고 카드 한 장이 나타납니다.</p>
     <p id="announcement" class="sr-only" role="status" aria-live="polite"></p>

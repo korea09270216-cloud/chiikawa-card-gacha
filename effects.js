@@ -18,34 +18,36 @@ export function refreshMagnetic() {
 }
 
 function startMotion() {
-  if (motionFrame || reduceMotion.matches || !finePointer.matches || document.hidden) return;
+  if (motionFrame || reduceMotion.matches || document.hidden) return;
   lastMotion=performance.now();
   motionFrame=requestAnimationFrame(updateMotion);
 }
 
 function updateMotion(time) {
   motionFrame=0;
-  if (reduceMotion.matches || !finePointer.matches || document.hidden) return;
+  if (reduceMotion.matches || document.hidden) return;
   const dt=Math.min(.05,(time-lastMotion)/1000);lastMotion=time;
   const measurements=magnets.map((state)=>({state,rect:state.el.getBoundingClientRect()}));
   for(const {state,rect} of measurements){
     if(!rect.width || !rect.height)continue;
     const dx=pointer.x-(rect.left+rect.width/2),dy=pointer.y-(rect.top+rect.height/2);
     const distance=Math.hypot(dx,dy),radius=Math.max(260,rect.width*1.7);
-    const active=['sealed','revealed'].includes(scene.dataset.phase);
+    const active=finePointer.matches && ['bundles','sealed','revealed'].includes(scene.dataset.phase);
     const strength=active ? Math.max(0,1-distance/radius) : 0;
     const ux=distance?dx/distance:0,uy=distance?dy/distance:0;
     const ease=1-Math.exp(-dt/(strength>.01?.1:.16));
-    state.rx+=(-uy*10*strength-state.rx)*ease;
-    state.ry+=(ux*12*strength-state.ry)*ease;
+    const cardIdle=state.el.classList.contains('card-magnetic') && scene.dataset.phase==='revealed';
+    const idleX=cardIdle?Math.cos(time/2600)*2.5:0;
+    const idleY=cardIdle?Math.sin(time/1850)*8.5:0;
+    state.rx+=(idleX-uy*10*strength-state.rx)*ease;
+    state.ry+=(idleY+ux*12*strength-state.ry)*ease;
     state.rotation+=(ux*3*strength-state.rotation)*ease;
     state.lift+=(-7*strength-state.lift)*ease;
     state.el.style.transform=`perspective(1000px) translateY(${state.lift.toFixed(2)}px) rotateX(${state.rx.toFixed(2)}deg) rotateY(${state.ry.toFixed(2)}deg) rotateZ(${(state.base+state.rotation).toFixed(2)}deg)`;
     state.el.classList.toggle('influenced',strength>.01);
-    if(strength>0){
-      state.el.style.setProperty('--shine-x',`${Math.max(0,Math.min(100,(pointer.x-rect.left)/rect.width*100))}%`);
-      state.el.style.setProperty('--shine-y',`${Math.max(0,Math.min(100,(pointer.y-rect.top)/rect.height*100))}%`);
-    }
+    // A fixed studio strip light: the reflection changes with surface orientation,
+    // never with pointer coordinates. Idle yaw also sweeps it on touch devices.
+    state.el.style.setProperty('--reflection-x',`${(50+state.ry*8.5+state.rx*3).toFixed(2)}%`);
   }
   motionFrame=requestAnimationFrame(updateMotion);
 }
@@ -55,7 +57,7 @@ window.addEventListener('pointermove',(event)=>{if(event.pointerType!=='touch')p
 window.addEventListener('blur',settle);
 window.addEventListener('scroll',settle,{passive:true});
 document.addEventListener('mouseleave',settle);
-finePointer.addEventListener('change',()=>{settle();finePointer.matches?startMotion():stopMotion();});
+finePointer.addEventListener('change',()=>{settle();startMotion();});
 
 // Only cosmetic particles use Math.random. Card selection uses crypto in app.js.
 export function burstLight(power=1){
@@ -65,8 +67,8 @@ export function burstLight(power=1){
   const x=innerWidth/2,y=power<.4?rect.top+rect.height*.106:innerHeight*.47;
   const count=Math.round(70*power);
   for(let i=0;i<count;i++){
-    const angle=Math.random()*Math.PI*2,speed=30+Math.random()*190*power;
-    particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,born:burstAt,life:1200+Math.random()*1500,size:.6+Math.random()*1.3});
+    const angle=Math.random()*Math.PI*2,speed=50+Math.random()*300*power;
+    particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,born:burstAt,life:1700+Math.random()*1700,size:.7+Math.random()*1.5});
   }
 }
 export function resetEffects(){burstAt=-10000;burstPower=0;particles=[];settle();}
@@ -146,7 +148,7 @@ function createSpace(){
     }
     const age=Math.max(0,(time-burstAt)/1000);
     const residual=scene.dataset.phase==='revealed'?.17:0;
-    const power=reduceMotion.matches?0:Math.max(residual,burstPower*Math.exp(-age*.9)*2.2);
+    const power=reduceMotion.matches?0:Math.max(residual,burstPower*Math.exp(-age*.65)*2.8);
     rays?.render(time,power<.005?0:power);
   }
   function tick(time){frame=0;if(document.hidden)return;if(time-lastFrame>33){lastFrame=time;draw(time);}if(!reduceMotion.matches)frame=requestAnimationFrame(tick);}
@@ -166,19 +168,36 @@ function getAudio(){
 export function playRip(unlockOnly=false){
   const ac=getAudio();if(!ac||unlockOnly)return;
   try{
-    const length=Math.round(ac.sampleRate*.7),buffer=ac.createBuffer(1,length,ac.sampleRate),samples=buffer.getChannelData(0);
+    const length=Math.round(ac.sampleRate*1.25),buffer=ac.createBuffer(1,length,ac.sampleRate),samples=buffer.getChannelData(0);
     for(let i=0;i<length;i++){const t=i/ac.sampleRate;samples[i]=(Math.random()*2-1)*(.4+.6*Math.abs(Math.sin(t*250)));}
     const source=ac.createBufferSource(),filter=ac.createBiquadFilter(),gain=ac.createGain();
-    source.buffer=buffer;filter.type='bandpass';filter.frequency.setValueAtTime(900,ac.currentTime);filter.frequency.exponentialRampToValueAtTime(3400,ac.currentTime+.6);filter.Q.value=.65;
-    gain.gain.setValueAtTime(0,ac.currentTime);gain.gain.linearRampToValueAtTime(.15,ac.currentTime+.06);gain.gain.setValueAtTime(.12,ac.currentTime+.5);gain.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.7);
-    source.connect(filter).connect(gain).connect(ac.destination);source.start();source.stop(ac.currentTime+.72);
+    source.buffer=buffer;filter.type='bandpass';filter.frequency.setValueAtTime(700,ac.currentTime);filter.frequency.exponentialRampToValueAtTime(4000,ac.currentTime+1.1);filter.Q.value=.65;
+    gain.gain.setValueAtTime(0,ac.currentTime);gain.gain.linearRampToValueAtTime(.17,ac.currentTime+.08);gain.gain.setValueAtTime(.14,ac.currentTime+.85);gain.gain.exponentialRampToValueAtTime(.001,ac.currentTime+1.25);
+    source.connect(filter).connect(gain).connect(ac.destination);source.start();source.stop(ac.currentTime+1.27);
   }catch{/* Audio is optional. */}
 }
 export function playReveal(){
   const ac=getAudio();if(!ac)return;
-  try{[392,587.33,783.99,1174.66].forEach((frequency,i)=>{
-    const at=ac.currentTime+i*.11,osc=ac.createOscillator(),gain=ac.createGain();osc.type='sine';osc.frequency.value=frequency;
-    gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.035,at+.035);gain.gain.exponentialRampToValueAtTime(.0001,at+1.6);
-    osc.connect(gain).connect(ac.destination);osc.start(at);osc.stop(at+1.65);
+  try{[392,587.33,783.99,1174.66,1567.98,2349.32,3135.96].forEach((frequency,i)=>{
+    const at=ac.currentTime+.45+i*.1,osc=ac.createOscillator(),gain=ac.createGain();osc.type='sine';osc.frequency.value=frequency;
+    gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.04-i*.003,at+.025);gain.gain.exponentialRampToValueAtTime(.0001,at+2.1);
+    osc.connect(gain).connect(ac.destination);osc.start(at);osc.stop(at+2.15);
   });}catch{/* Audio is optional. */}
+}
+
+export function playCharge(){
+  const ac=getAudio();if(!ac)return;
+  try{const osc=ac.createOscillator(),gain=ac.createGain(),at=ac.currentTime;osc.type='triangle';osc.frequency.setValueAtTime(65,at);osc.frequency.exponentialRampToValueAtTime(210,at+.9);gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.045,at+.65);gain.gain.exponentialRampToValueAtTime(.001,at+.95);osc.connect(gain).connect(ac.destination);osc.start();osc.stop(at+1);}catch{}
+}
+export function playImpact(){
+  const ac=getAudio();if(!ac)return;
+  try{
+    const at=ac.currentTime,osc=ac.createOscillator(),gain=ac.createGain();osc.type='sine';osc.frequency.setValueAtTime(135,at);osc.frequency.exponentialRampToValueAtTime(35,at+.6);gain.gain.setValueAtTime(.13,at);gain.gain.exponentialRampToValueAtTime(.001,at+1.2);osc.connect(gain).connect(ac.destination);osc.start();osc.stop(at+1.25);
+    const buffer=ac.createBuffer(1,ac.sampleRate,ac.sampleRate),data=buffer.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
+    const source=ac.createBufferSource(),filter=ac.createBiquadFilter(),air=ac.createGain();source.buffer=buffer;filter.type='lowpass';filter.frequency.setValueAtTime(5000,at);filter.frequency.exponentialRampToValueAtTime(180,at+.9);air.gain.setValueAtTime(0,at);air.gain.linearRampToValueAtTime(.1,at+.1);air.gain.exponentialRampToValueAtTime(.001,at+1);source.connect(filter).connect(air).connect(ac.destination);source.start();source.stop(at+1.05);
+  }catch{}
+}
+export function playSuspense(){
+  const ac=getAudio();if(!ac)return;
+  try{[1174.66,1567.98].forEach((frequency,i)=>{const at=ac.currentTime,osc=ac.createOscillator(),gain=ac.createGain();osc.type='sine';osc.frequency.setValueAtTime(frequency,at);osc.frequency.linearRampToValueAtTime(frequency+6,at+2.2);gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(i?.012:.025,at+.15);gain.gain.exponentialRampToValueAtTime(.0001,at+2.6);osc.connect(gain).connect(ac.destination);osc.start();osc.stop(at+2.65);});}catch{}
 }

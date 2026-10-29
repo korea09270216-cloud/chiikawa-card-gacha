@@ -1,151 +1,200 @@
-import { refreshMagnetic, burstLight, resetEffects, playRip, playReveal } from './effects.js?v=2';
+import { PACK_SETS } from './packs.js?v=3';
+import { refreshMagnetic, burstLight, resetEffects, playCharge, playRip, playImpact, playSuspense, playReveal } from './effects.js?v=3';
 
-// Card identities are never rendered or requested before the pack is opened.
-const cards = [
-  {id:1,name:'치이카와'}, {id:2,name:'하치와레'}, {id:3,name:'우사기'},
-  {id:4,name:'모몽가'}, {id:5,name:'랏코'}, {id:6,name:'쿠리만쥬'}
-];
 const $ = (selector) => document.querySelector(selector);
 const scene = $('#scene');
 const packButton = $('#pack-button');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const storageKey = 'chiikawa-awakening-v1';
-let phase = 'sealed';
-let counts = Array(6).fill(0);
+const escapeHTML = (value) => String(value).replace(/[&<>"']/g,(char)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+const countsByPack = new Map();
+let activePack = PACK_SETS[0];
+let phase = 'bundles';
+let view = 'bundles';
+let selectedCard = null;
+let collectionPackId = activePack.id;
 let sequence = 0;
-let timers = new Set();
+const timers = new Set();
 
-try {
-  const stored = JSON.parse(localStorage.getItem(storageKey));
-  if (stored?.version === 1 && Array.isArray(stored.counts) && stored.counts.length === 6) {
-    counts = stored.counts.map((n) => Number.isSafeInteger(n) && n >= 0 && n < 100000000 ? n : 0);
-  }
-} catch { /* Opening works when local storage is unavailable. */ }
-
-function setPhase(next) {
-  phase = next;
-  scene.dataset.phase = next;
+for (const pack of PACK_SETS) {
+  let counts = Array(pack.cards.length).fill(0);
+  try {
+    const stored = JSON.parse(localStorage.getItem(pack.storageKey));
+    if (stored?.version === 1 && Array.isArray(stored.counts)) {
+      counts = counts.map((_,index) => Number.isSafeInteger(stored.counts[index]) && stored.counts[index]>=0 && stored.counts[index]<100000000 ? stored.counts[index] : 0);
+    }
+  } catch { /* Opening remains usable with unavailable or invalid storage. */ }
+  countsByPack.set(pack.id,counts);
 }
+let collectionUnlocked = [...countsByPack.values()].some((counts)=>counts.some((count)=>count>0));
+const getCounts = (pack=activePack) => countsByPack.get(pack.id);
+const stable = () => ['bundles','sealed','revealed','collection'].includes(phase);
 
+function setPhase(next) { phase=next;scene.dataset.phase=next; }
+function setView(next) { view=next;scene.dataset.view=next; }
+function syncNavigation() {
+  $('#result-actions').hidden = !stable() || (view==='bundles' && !collectionUnlocked);
+  $('#card-list').hidden = !collectionUnlocked;
+  $('#card-list').setAttribute('aria-expanded',String(view==='collection'));
+  $('#save-card').hidden = view!=='result' || !selectedCard || phase!=='revealed';
+  $('#choose-bundle').hidden = view==='bundles' || !stable();
+}
 function later(callback,delay) {
-  const token = sequence;
-  const timer = setTimeout(() => {
-    timers.delete(timer);
-    if (token === sequence) callback();
-  },delay);
+  const token=sequence;
+  const timer=setTimeout(()=>{timers.delete(timer);if(token===sequence)callback();},delay);
   timers.add(timer);
 }
-
-function randomCard() {
-  const values = new Uint32Array(1);
-  const limit = Math.floor(4294967296 / cards.length) * cards.length;
-  do { crypto.getRandomValues(values); } while (values[0] >= limit);
-  return cards[values[0] % cards.length];
+function cancelPending() { sequence++;timers.forEach(clearTimeout);timers.clear(); }
+function randomCard(pack=activePack) {
+  const values=new Uint32Array(1),limit=Math.floor(4294967296/pack.cards.length)*pack.cards.length;
+  do{crypto.getRandomValues(values);}while(values[0]>=limit);
+  return pack.cards[values[0]%pack.cards.length];
 }
-
 function loadCard(card) {
-  return new Promise((resolve,reject) => {
-    const image = new Image();
-    const timeout = setTimeout(() => finish(new Error('image timeout')),12000);
-    function finish(error) {
-      clearTimeout(timeout);
-      image.onload = image.onerror = null;
-      error ? reject(error) : resolve(image);
-    }
-    image.onload = () => finish();
-    image.onerror = () => finish(new Error('image load failed'));
-    image.src = `assets/cards/card-${String(card.id).padStart(2,'0')}.png`;
+  return new Promise((resolve,reject)=>{
+    const image=new Image();
+    const timeout=setTimeout(()=>finish(new Error('image timeout')),12000);
+    function finish(error){clearTimeout(timeout);image.onload=image.onerror=null;error?reject(error):resolve(image);}
+    image.onload=()=>finish();image.onerror=()=>finish(new Error('image load failed'));image.src=card.image;
   });
 }
 
-function revealCard(card,image) {
-  setPhase('revealing');
-  // The only card image placed in the DOM is the result of this single opening.
-  const zone = $('#reveal-zone');
-  zone.innerHTML = '<div class="card-entrance"><div class="card-surface" data-magnetic><span class="foil" aria-hidden="true"></span><span class="specular" aria-hidden="true"></span><span class="reveal-sweep" aria-hidden="true"></span></div></div>';
-  image.id = 'revealed-image';
-  image.alt = `${card.name} SSS 카드`;
-  image.width = 756;
-  image.height = 1056;
-  image.draggable = false;
-  zone.querySelector('.card-surface').prepend(image);
-  zone.hidden = false;
-  const isNew = counts[card.id-1] === 0;
-  counts[card.id-1] += 1;
-  try { localStorage.setItem(storageKey,JSON.stringify({version:1,counts})); }
-  catch { /* The current reveal and download remain available without storage. */ }
-  $('#save-card').href = image.src;
-  $('#save-card').download = `${card.name}_SSS.png`;
-  burstLight(1);
-  playReveal();
-  later(() => {
-    setPhase('revealed');
-    $('#pack-position').hidden = true;
-    packButton.removeAttribute('aria-busy');
-    $('#result-actions').hidden = false;
-    $('#announcement').textContent = `${card.name} SSS 카드가 나타났습니다.${isNew ? ' 처음 만난 카드입니다.' : ''}`;
-    $('#next-pack').focus({preventScroll:true});
-    refreshMagnetic();
-  },reducedMotion.matches ? 80 : 1750);
+function renderBundles() {
+  $('#bundle-stage').innerHTML=PACK_SETS.map((pack)=>`<button class="bundle-choice" data-pack="${escapeHTML(pack.id)}" aria-label="${escapeHTML(pack.label)} 꾸러미 선택"><span class="bundle-float"><span class="bundle-tilt" data-magnetic data-base="-2"><img src="${escapeHTML(pack.boxImage)}" alt="${escapeHTML(pack.label)} 미개봉 카드 꾸러미" width="1254" height="1254" draggable="false"></span></span>${PACK_SETS.length>1?`<span class="bundle-label">${escapeHTML(pack.label)}</span>`:''}</button>`).join('');
+  refreshMagnetic();
+}
+function selectPack(packId) {
+  if(phase!=='bundles')return;
+  const pack=PACK_SETS.find((item)=>item.id===packId);if(!pack)return;
+  activePack=pack;collectionPackId=pack.id;cancelPending();setPhase('selecting');syncNavigation();
+  document.querySelectorAll('.bundle-choice').forEach((button)=>button.disabled=true);
+  $('#bundle-stage').classList.add('departing');
+  document.querySelectorAll('.packet-layer img').forEach((image)=>image.src=pack.wrapperImage);
+  packButton.setAttribute('aria-label',`${pack.label} 밀봉 카드팩 뜯기`);
+  later(()=>{
+    $('#bundle-stage').hidden=true;$('#bundle-stage').classList.remove('departing');
+    $('#pack-position').hidden=false;$('#pack-position').classList.add('pack-arriving');
+    setView('pack');setPhase('sealed');packButton.disabled=false;syncNavigation();refreshMagnetic();
+    packButton.focus({preventScroll:true});
+    later(()=>$('#pack-position').classList.remove('pack-arriving'),700);
+  },reducedMotion.matches?30:650);
 }
 
+function buildMysteryCard() {
+  $('#reveal-zone').innerHTML=`<div class="card-entrance"><div class="card-magnetic" data-magnetic><div class="card-flipper"><div class="card-face card-front"><div class="card-surface"></div></div><div class="card-face card-back" aria-label="아직 공개되지 않은 카드 뒷면"><span class="back-brand">${escapeHTML(activePack.brand)}</span><span class="back-sigil" aria-hidden="true">✦</span><span class="back-edition">${escapeHTML(activePack.edition)}</span></div></div></div></div>`;
+  $('#reveal-zone').hidden=false;
+}
+function fillCardFront(card,image) {
+  const surface=$('#reveal-zone .card-surface');
+  image.id='revealed-image';image.alt=`${card.name} SSS 카드`;image.width=756;image.height=1056;image.draggable=false;
+  surface.replaceChildren(image);
+  surface.insertAdjacentHTML('beforeend','<span class="foil" aria-hidden="true"></span><span class="specular" aria-hidden="true"></span><span class="reveal-sweep" aria-hidden="true"></span>');
+  selectedCard={packId:activePack.id,card};
+  $('#save-card').href=card.image;$('#save-card').download=`${card.name}_SSS.png`;
+}
+function revealCard(card,image) {
+  setPhase('revealing');fillCardFront(card,image);scene.classList.add('unveiling');
+  const counts=getCounts(),index=activePack.cards.findIndex((item)=>item.id===card.id),isNew=counts[index]===0;
+  counts[index]++;collectionUnlocked=true;
+  try{localStorage.setItem(activePack.storageKey,JSON.stringify({version:1,counts}));}catch{/* Download remains available without storage. */}
+  burstLight(1.25);playReveal();
+  later(()=>{
+    setPhase('revealed');setView('result');$('#pack-position').hidden=true;packButton.removeAttribute('aria-busy');
+    syncNavigation();$('#announcement').textContent=`${card.name} SSS 카드가 나타났습니다.${isNew?' 처음 만난 카드입니다.':''}`;
+    $('#card-list').focus({preventScroll:true});refreshMagnetic();
+  },reducedMotion.matches?60:2300);
+}
 async function openPack() {
-  if (phase !== 'sealed') return;
-  sequence += 1;
-  const token = sequence;
-  setPhase('loading');
-  packButton.disabled = true;
-  packButton.setAttribute('aria-busy','true');
-  $('#message').textContent = '';
-  // Unlock audio in the user's click gesture, before awaiting the card image.
+  if(phase!=='sealed')return;
+  cancelPending();const token=sequence;
+  setPhase('loading');packButton.disabled=true;packButton.setAttribute('aria-busy','true');syncNavigation();$('#message').textContent='';
   playRip(true);
-  try {
-    const card = randomCard();
-    const image = await loadCard(card);
-    if (token !== sequence) return;
-    setPhase('tearing');
-    scene.classList.add('torn');
-    refreshMagnetic();
-    playRip();
-    burstLight(.22);
-    later(() => {
-      setPhase('opening');
-      scene.classList.add('releasing');
-      burstLight(.7);
-      later(() => revealCard(card,image),reducedMotion.matches ? 30 : 260);
-    },reducedMotion.matches ? 80 : 850);
-  } catch {
-    if (token !== sequence) return;
-    setPhase('sealed');
-    packButton.disabled = false;
-    packButton.removeAttribute('aria-busy');
-    $('#message').textContent = '팩을 불러오지 못했어요. 다시 눌러주세요.';
-    packButton.focus({preventScroll:true});
+  try{
+    const card=randomCard(),image=await loadCard(card);if(token!==sequence)return;
+    $('#pack-position').classList.remove('pack-arriving');
+    setPhase('charging');scene.classList.add('charging');playCharge();refreshMagnetic();
+    later(()=>{setPhase('tearing');scene.classList.remove('charging');scene.classList.add('torn');playRip();burstLight(.18);},reducedMotion.matches?20:900);
+    later(()=>{setPhase('opening');scene.classList.add('releasing');burstLight(.85);playImpact();},reducedMotion.matches?50:2500);
+    later(()=>{
+      setPhase('emerging');setView('result');buildMysteryCard();playSuspense();
+      later(()=>revealCard(card,image),reducedMotion.matches?30:2200);
+    },reducedMotion.matches?80:2950);
+  }catch{
+    if(token!==sequence)return;
+    setPhase('sealed');packButton.disabled=false;packButton.removeAttribute('aria-busy');syncNavigation();
+    $('#message').textContent='팩을 불러오지 못했어요. 다시 눌러주세요.';packButton.focus({preventScroll:true});
   }
 }
 
+function clearStage() {
+  cancelPending();selectedCard=null;
+  $('#reveal-zone').hidden=true;$('#reveal-zone').replaceChildren();
+  $('#collection-panel').hidden=true;$('#collection-grid').replaceChildren();
+  $('#pack-position').hidden=true;$('#pack-position').classList.remove('pack-arriving');
+  $('#save-card').removeAttribute('href');$('#save-card').removeAttribute('download');
+  $('#announcement').textContent='';$('#message').textContent='';
+  scene.classList.remove('charging','torn','releasing','unveiling','previewing');
+  $('#bundle-stage').hidden=true;
+  document.querySelectorAll('.bundle-choice').forEach((button)=>button.disabled=false);
+  packButton.disabled=false;packButton.removeAttribute('aria-busy');resetEffects();
+}
+function showBundles() {
+  if(!stable())return;
+  clearStage();setPhase('bundles');setView('bundles');$('#bundle-stage').hidden=false;
+  syncNavigation();refreshMagnetic();
+  $('#bundle-stage .bundle-choice')?.focus({preventScroll:true});
+}
 function nextPack() {
-  if (phase !== 'revealed') return;
-  sequence += 1;
-  timers.forEach(clearTimeout);
-  timers.clear();
-  $('#reveal-zone').hidden = true;
-  $('#reveal-zone').replaceChildren();
-  $('#result-actions').hidden = true;
-  $('#save-card').removeAttribute('href');
-  $('#save-card').removeAttribute('download');
-  $('#announcement').textContent = '';
-  $('#message').textContent = '';
-  scene.classList.remove('torn','releasing');
-  setPhase('sealed');
-  $('#pack-position').hidden = false;
-  packButton.disabled = false;
-  packButton.removeAttribute('aria-busy');
-  resetEffects();
-  refreshMagnetic();
-  packButton.focus({preventScroll:true});
+  if(!stable())return;
+  clearStage();
+  document.querySelectorAll('.packet-layer img').forEach((image)=>image.src=activePack.wrapperImage);
+  packButton.setAttribute('aria-label',`${activePack.label} 밀봉 카드팩 뜯기`);
+  $('#pack-position').hidden=false;setPhase('sealed');setView('pack');
+  syncNavigation();refreshMagnetic();packButton.focus({preventScroll:true});
 }
 
+function renderCollection(pack) {
+  const counts=getCounts(pack),owned=counts.filter((n)=>n>0).length;
+  $('#collection-count').textContent=`${owned} / ${pack.cards.length}`;
+  $('#collection-summary').textContent=`${pack.label} · 총 ${counts.reduce((a,b)=>a+b,0).toLocaleString('ko-KR')}장 획득`;
+  $('#pack-tabs').innerHTML=PACK_SETS.map((item)=>`<button class="pack-tab" data-collection-pack="${escapeHTML(item.id)}" aria-pressed="${item.id===pack.id}">${escapeHTML(item.label)}</button>`).join('');
+  $('#collection-grid').innerHTML=pack.cards.map((card,index)=>{
+    const count=counts[index];
+    if(!count)return '<div class="collection-slot locked"><div class="unknown-card" role="img" aria-label="아직 뽑지 않은 카드"><span aria-hidden="true">?</span></div><p class="unknown-label">미발견</p></div>';
+    return `<button class="collection-slot owned" data-owned-card="${card.id}" data-owned-pack="${escapeHTML(pack.id)}" aria-label="${escapeHTML(card.name)}, ${count}장 보유, 크게 보기"><span class="collection-art"><img src="${escapeHTML(card.image)}" alt="${escapeHTML(card.name)} SSS 카드" width="756" height="1056" loading="lazy"><span class="owned-count">× ${count}</span></span><span class="collection-card-name">${escapeHTML(card.name)}<small>SSS</small></span></button>`;
+  }).join('');
+}
+function showCollection(packId=activePack.id) {
+  if(!collectionUnlocked || !stable())return;
+  const pack=PACK_SETS.find((item)=>item.id===packId);if(!pack)return;
+  cancelPending();collectionPackId=pack.id;activePack=pack;
+  $('#bundle-stage').hidden=true;$('#pack-position').hidden=true;$('#reveal-zone').hidden=true;$('#reveal-zone').replaceChildren();
+  scene.classList.remove('charging','torn','releasing','unveiling','previewing');
+  setPhase('collection');setView('collection');resetEffects();renderCollection(pack);
+  $('#collection-panel').hidden=false;$('#collection-panel').scrollTop=0;$('#message').textContent='';syncNavigation();
+  $('#collection-title').focus({preventScroll:true});refreshMagnetic();
+}
+async function inspectOwnedCard(packId,cardId) {
+  if(phase!=='collection')return;
+  const pack=PACK_SETS.find((item)=>item.id===packId),index=pack?.cards.findIndex((card)=>String(card.id)===String(cardId));
+  if(!pack || index<0 || !getCounts(pack)[index])return;
+  cancelPending();const token=sequence,card=pack.cards[index];
+  setPhase('inspecting');$('#collection-grid').setAttribute('aria-busy','true');syncNavigation();
+  try{
+    const image=await loadCard(card);if(token!==sequence)return;
+    activePack=pack;buildMysteryCard();fillCardFront(card,image);scene.classList.add('previewing','unveiling');
+    $('#collection-panel').hidden=true;$('#collection-grid').replaceChildren();
+    setPhase('revealed');setView('result');syncNavigation();refreshMagnetic();
+    $('#announcement').textContent=`${card.name} SSS 카드, ${getCounts(pack)[index]}장 보유.`;$('#card-list').focus({preventScroll:true});
+  }catch{
+    if(token!==sequence)return;setPhase('collection');syncNavigation();$('#message').textContent='카드를 불러오지 못했어요. 다시 눌러주세요.';
+  }finally{$('#collection-grid').removeAttribute('aria-busy');}
+}
+
+$('#bundle-stage').addEventListener('click',(event)=>{const button=event.target.closest('[data-pack]');if(button)selectPack(button.dataset.pack);});
 packButton.addEventListener('click',openPack);
 $('#next-pack').addEventListener('click',nextPack);
-refreshMagnetic();
+$('#choose-bundle').addEventListener('click',showBundles);
+$('#card-list').addEventListener('click',()=>showCollection(collectionPackId));
+$('#pack-tabs').addEventListener('click',(event)=>{const button=event.target.closest('[data-collection-pack]');if(button)showCollection(button.dataset.collectionPack);});
+$('#collection-grid').addEventListener('click',(event)=>{const button=event.target.closest('[data-owned-card]');if(button)inspectOwnedCard(button.dataset.ownedPack,button.dataset.ownedCard);});
+renderBundles();syncNavigation();
