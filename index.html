@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#091710">
+  <meta name="description" content="치이카와 마수각성 컬렉션. 빛나는 SSS 카드 6종을 무료로 뽑고 나만의 컬렉션을 완성하세요.">
+  <title>치이카와 · 마수각성 컬렉션</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23091710'/%3E%3Cpath d='M32 7 39 25 57 32 39 39 32 57 25 39 7 32 25 25Z' fill='%23e7ca82'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script src="effects.js" type="module"></script>
+  <script src="app.js" type="module"></script>
+</head>
+<body>
+  <a class="skip-link" href="#summon">카드 뽑기로 이동</a>
+  <header class="site-header wrap">
+    <a class="brand" href="#" aria-label="치이카와 컬렉션 홈"><span class="brand-mark">✧</span><span>CHIIKAWA<small>THE SECRET COLLECTION</small></span></a>
+    <nav aria-label="주 메뉴"><a class="nav-active" href="#summon">카드 뽑기</a><a href="#collection">나의 컬렉션 <span id="nav-count">0</span></a></nav>
+    <div class="header-controls"><button class="icon-button" id="sound-toggle" aria-label="소리 켜기" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4 5 9H2v6h3l6 5V4ZM16 9l6 6m0-6-6 6"/></svg></button><button class="effects-toggle" id="effects-toggle" aria-pressed="true"><span class="status-dot"></span>빛 효과 <span id="effects-label">ON</span></button></div>
+  </header>
+  <main>
+    <section class="hero wrap" id="summon" aria-labelledby="hero-title">
+      <canvas id="light-canvas" aria-hidden="true"></canvas>
+      <div class="light-fallback" aria-hidden="true"></div>
+      <div class="hero-copy">
+        <div class="edition"><span class="tiny-star">✦</span> AWAKENING SERIES <span class="edition-line"></span> VOL. 01</div>
+        <h1 id="hero-title">작은 친구들의<br><em>눈부신 각성.</em></h1>
+        <p class="hero-description">귀여움 너머, 상상하지 못한 힘.<br>빛 속에 숨겨진 나만의 치이카와를 만나보세요.</p>
+        <div class="hero-tags"><span>SSS 등급 확정</span><span>오리지널 카드 6종</span></div>
+        <div class="hero-note"><span>✧</span><p>마우스를 가까이 가져가 보세요.<br><strong>카드가 당신의 움직임에 반응해요.</strong></p></div>
+      </div>
+      <div class="card-stage" aria-label="치이카와, 하치와레, 우사기 SSS 카드 미리보기">
+        <div class="orbital orbital-one" aria-hidden="true"></div><div class="orbital orbital-two" aria-hidden="true"></div>
+        <div class="stage-star star-one" aria-hidden="true">✧</div><div class="stage-star star-two" aria-hidden="true">✦</div>
+        <div class="stage-card stage-left" data-magnetic data-base="-13"><div class="card-surface"><img src="assets/cards/card-02.png" alt="하치와레 SSS 카드" width="756" height="1056"><div class="foil"></div><div class="specular"></div></div></div>
+        <div class="stage-card stage-right" data-magnetic data-base="13"><div class="card-surface"><img src="assets/cards/card-03.png" alt="우사기 SSS 카드" width="756" height="1056"><div class="foil"></div><div class="specular"></div></div></div>
+        <div class="stage-card stage-center" data-magnetic data-base="-4"><div class="card-surface"><img src="assets/cards/card-01.png" alt="치이카와 SSS 카드" width="756" height="1056" fetchpriority="high"><div class="foil"></div><div class="specular"></div></div></div>
+        <div class="stage-floor" aria-hidden="true"></div>
+        <div class="stage-caption"><span></span> MYTHIC GOLD · HOLOGRAM EDITION <span></span></div>
+      </div>
+      <div class="hero-index" aria-hidden="true"><span>MA01 — 001 / 006</span><span>SMALL FRIENDS. EXTRAORDINARY POWER.</span></div>
+    </section>
+    <section class="summon-bar wrap" aria-label="카드 뽑기">
+      <div class="summon-info"><span class="seal">SSS</span><div><h2>마수각성 컬렉션</h2><p>모든 뽑기 SSS 확정 <i>·</i> 무료로 무제한</p></div></div>
+      <div class="draw-actions"><button class="button button-secondary" id="draw-six"><span>6장 뽑기</span><span class="button-icon">✧</span></button><button class="button button-gold" id="draw-one"><span>카드 1장 뽑기</span><span class="button-icon">↗</span></button></div>
+      <button class="text-button probability-trigger">등장 확률 안내 <span>ⓘ</span></button>
+    </section>
+    <section class="collection wrap" id="collection" aria-labelledby="collection-title">
+      <div class="section-heading"><div><p class="eyebrow">YOUR LITTLE TREASURES</p><h2 id="collection-title">나의 컬렉션 <span id="collection-count">0 <small>/ 6</small></span></h2></div><div class="collection-tools"><span id="total-count">총 0장 뽑음</span><button class="filter-button" id="owned-filter" aria-pressed="false">보유 카드만 <span>○</span></button></div></div>
+      <div class="progress-track" role="progressbar" aria-label="카드 수집 진행률" aria-valuemin="0" aria-valuemax="6" aria-valuenow="0"><div id="collection-progress"></div></div>
+      <div class="collection-grid" id="collection-grid"></div>
+      <p class="empty-state" id="empty-state" hidden>아직 모은 카드가 없어요. 첫 번째 빛을 깨워볼까요?</p>
+      <div class="collection-footnote"><p><span>✦</span> <span id="collection-hint">6명의 작은 친구들, 하나의 눈부신 컬렉션.</span></p><span>수집 기록은 이 브라우저에 자동 저장돼요.</span></div>
+    </section>
+  </main>
+  <footer class="site-footer wrap"><span>CHIIKAWA <span class="footer-star">✧</span> SECRET COLLECTION</span><p>비공식 팬 컬렉션 · 무료 카드 뽑기</p><button class="text-button probability-trigger">컬렉션 안내 ↗</button></footer>
+  <dialog id="result-dialog" aria-labelledby="result-title"><div class="result-shell"><button class="close-button" id="close-result" aria-label="결과 닫기">×</button><div class="reveal-rays" aria-hidden="true"></div><div class="result-top"><p class="eyebrow" id="result-eyebrow">A LITTLE MIRACLE</p><h2 id="result-title">빛 속에서 만난 친구</h2><p id="result-subtitle"></p></div><div id="result-cards"></div><div class="result-actions"><button class="button button-secondary" id="view-collection">컬렉션 보기</button><button class="button button-gold" id="draw-again">한 번 더 뽑기 <span>✧</span></button></div></div></dialog>
+  <dialog id="info-dialog" aria-labelledby="info-title"><div class="info-shell"><button class="close-button" id="close-info" aria-label="안내 닫기">×</button><p class="eyebrow">COLLECTION GUIDE</p><h2 id="info-title">어떤 친구를 만나게 될까요?</h2><p>6종 모두 SSS 등급이에요. 매번 같은 확률로 독립적으로 뽑으며, 같은 카드가 다시 나올 수 있어요.</p><div id="probability-list"></div><p class="info-note">1장과 6장 뽑기의 카드별 확률은 같아요. 6장 뽑기는 중복 없는 세트가 아닌, 6번의 독립 뽑기입니다. 유료 재화나 결제는 없어요.</p><p class="info-note">모은 카드와 수량은 현재 브라우저에 저장됩니다. 브라우저 데이터를 삭제하면 수집 기록도 사라져요.</p><button class="button button-gold" id="info-confirm">좋아요, 만나러 갈게요</button></div></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <p class="sr-only" id="announcement" role="status" aria-live="polite"></p>
+</body>
+</html>

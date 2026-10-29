@@ -1,0 +1,7 @@
+{
+  "name": "chiikawa-card-gacha",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "check": "node --check app.js && node --check effects.js", "start": "python -m http.server 4173 --bind 127.0.0.1" }
+}
