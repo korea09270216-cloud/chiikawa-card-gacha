@@ -33,20 +33,23 @@ function updateMotion(time) {
     const dx=pointer.x-(rect.left+rect.width/2),dy=pointer.y-(rect.top+rect.height/2);
     const distance=Math.hypot(dx,dy),radius=Math.max(260,rect.width*1.7);
     const active=finePointer.matches && ['bundles','sealed','revealed'].includes(scene.dataset.phase);
-    const strength=active ? Math.max(0,1-distance/radius) : 0;
-    const ux=distance?dx/distance:0,uy=distance?dy/distance:0;
-    const ease=1-Math.exp(-dt/(strength>.01?.1:.16));
-    const cardIdle=state.el.classList.contains('card-magnetic') && scene.dataset.phase==='revealed';
+    const hover=active && pointer.x>-9999;
+    const strength=hover ? Math.max(0,1-distance/radius) : 0;
+    // Tilt is proportional to where the pointer is across the whole viewport (smooth, no direction flip at the centre),
+    // so left/right/up/down always lean the surface toward the cursor. Idle sway only runs while no pointer drives it.
+    const lean=(offset,half)=>Math.tanh(2.2*Math.max(-1,Math.min(1,offset/half)))/Math.tanh(2.2);
+    const nx=hover?lean(dx,innerWidth/2):0,ny=hover?lean(dy,innerHeight/2):0;
+    const ease=1-Math.exp(-dt/(hover?.1:.16));
+    const cardIdle=!hover && state.el.classList.contains('card-magnetic') && scene.dataset.phase==='revealed';
     const idleX=cardIdle?Math.cos(time/2600)*2.5:0;
     const idleY=cardIdle?Math.sin(time/1850)*8.5:0;
-    state.rx+=(idleX-uy*10*strength-state.rx)*ease;
-    state.ry+=(idleY+ux*12*strength-state.ry)*ease;
-    state.rotation+=(ux*3*strength-state.rotation)*ease;
+    state.rx+=(idleX-ny*11-state.rx)*ease;
+    state.ry+=(idleY+nx*14-state.ry)*ease;
+    state.rotation+=(nx*2-state.rotation)*ease;
     state.lift+=(-7*strength-state.lift)*ease;
     state.el.style.transform=`perspective(1000px) translateY(${state.lift.toFixed(2)}px) rotateX(${state.rx.toFixed(2)}deg) rotateY(${state.ry.toFixed(2)}deg) rotateZ(${(state.base+state.rotation).toFixed(2)}deg)`;
     state.el.classList.toggle('influenced',strength>.01);
-    // A fixed studio strip light: the reflection changes with surface orientation,
-    // never with pointer coordinates. Idle yaw also sweeps it on touch devices.
+    // Fixed light: the glint position changes with surface orientation, never with pointer coordinates.
     state.el.style.setProperty('--reflection-x',`${(50+state.ry*4.5+state.rx*2).toFixed(2)}%`);
   }
   motionFrame=requestAnimationFrame(updateMotion);

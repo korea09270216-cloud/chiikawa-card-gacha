@@ -1,6 +1,6 @@
-import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=4';
-import { boxMarkup } from './box3d.js?v=4';
-import { refreshMagnetic, burstLight, resetEffects, playCharge, playRip, playImpact, playSuspense, playReveal } from './effects.js?v=4';
+import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=5';
+import { boxMarkup } from './box3d.js?v=5';
+import { refreshMagnetic, burstLight, resetEffects, playCharge, playRip, playImpact, playSuspense, playReveal } from './effects.js?v=5';
 
 const $ = (selector) => document.querySelector(selector);
 const scene = $('#scene');

@@ -36,24 +36,19 @@
 @keyframes box3d-sway{0%,100%{transform:rotateX(-18deg) rotateY(19deg)}50%{transform:rotateX(-16deg) rotateY(31deg)}}
 @keyframes box3d-glint{0%,100%{transform:translateX(-30%)}50%{transform:translateX(30%)}}
 
-/* ---------- Card: restrained, fixed-light straight metallic strip ---------- */
-/* A fixed studio strip light: only the card's orientation (via --reflection-x) slides the straight reflection;
-   pointer coordinates are never used. All layers stay inside .card-surface (it clips them). */
+/* ---------- Card: one thick shine that sweeps through now and then ---------- */
+/* After the reveal a single soft diagonal band crosses the card, then rests (gsap.md §11 shine, CSS keyframes).
+   The band lives in .card-surface, which clips it to the rounded card. Pointer coordinates are never used. */
 .card-surface .specular,.card-surface .foil{position:absolute;inset:0;pointer-events:none;border-radius:inherit;--spec-pos:calc(50% + (var(--reflection-x,50%) - 50%)*.8)}
-.card-surface .specular{opacity:1;mix-blend-mode:normal;background:none}
-/* broad, very faint wash + a hairline on the core (screen, low alpha: never reaches white) */
-.card-surface .specular:before{content:'';position:absolute;inset:0;border-radius:inherit;mix-blend-mode:screen;
-  background:
-    linear-gradient(108deg,transparent calc(var(--spec-pos) - .9%),#ffdc9a3d calc(var(--spec-pos) - .25%),#ffe6b047 var(--spec-pos),#ffdc9a3d calc(var(--spec-pos) + .25%),transparent calc(var(--spec-pos) + .9%)),
-    linear-gradient(108deg,transparent calc(var(--spec-pos) - 22%),#ffd78614 calc(var(--spec-pos) - 8%),#ffe0a01f var(--spec-pos),#ffd78614 calc(var(--spec-pos) + 8%),transparent calc(var(--spec-pos) + 22%))}
-/* narrow warm-gold strip + a faint echo line; soft-light barely lifts already-bright pixels, so artwork never washes out */
-.card-surface .specular:after{content:'';position:absolute;inset:0;border-radius:inherit;mix-blend-mode:soft-light;
-  background:
-    linear-gradient(108deg,transparent calc(var(--spec-pos) - 5%),#ffc85a30 calc(var(--spec-pos) - 2.4%),#ffe09ab8 calc(var(--spec-pos) - .7%),#fff3cf var(--spec-pos),#ffe09ab8 calc(var(--spec-pos) + .7%),#ffc85a30 calc(var(--spec-pos) + 2.4%),transparent calc(var(--spec-pos) + 5%)),
-    linear-gradient(108deg,transparent calc(var(--spec-pos) + 5.4%),#ffd98a78 calc(var(--spec-pos) + 6.6%),transparent calc(var(--spec-pos) + 7.8%))}
+.card-surface .specular{overflow:hidden}
+.card-surface .specular:before{content:'';position:absolute;top:-10%;left:0;width:50%;height:120%;mix-blend-mode:screen;
+  background:linear-gradient(100deg,transparent 0,#ffe3a02e 18%,#fff0c88a 50%,#ffe3a02e 82%,transparent 100%);
+  transform:translateX(-240%) skewX(-18deg)}
+#scene[data-phase=revealed] .card-surface .specular:before{animation:card-shine-pass 5.5s ease-in-out .7s infinite}
+@keyframes card-shine-pass{0%{transform:translateX(-240%) skewX(-18deg)}22%,100%{transform:translateX(360%) skewX(-18deg)}}
 .card-surface .foil{opacity:.08;mix-blend-mode:screen;background:repeating-linear-gradient(115deg,transparent 0,#5affdd 15%,#e5a8ff 25%,#ffdb7b 35%,transparent 50%);background-size:260% 260%;background-position:var(--spec-pos) 50%}
 
 @media(prefers-reduced-motion:reduce){
   .box3d,.bx-gloss{animation:none}
-  .card-surface .specular{opacity:.5}
+  .card-surface .specular{display:none}
 }
