@@ -434,3 +434,6 @@
 #title-toast[data-tier]{--foot:17px}
 #title-toast[data-tier] .tt-eyebrow{margin-bottom:calc(var(--fs)*.46)!important}
 #title-toast[data-tier] .tt-flavor{margin-top:16px}
+
+/* Optical centring: this display font draws its ink ~0.088em below the middle of its line box (measured over all title names), so every name is nudged up by that much. */
+#title-toast[data-tier] .tt-name,#title-detail[data-tier] .td-body>.td-name,.tier-panel[data-tier] .title-card.owned .tc-name,.tier-panel[data-tier] .tp-title b{position:relative;top:-.088em}
