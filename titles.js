@@ -172,12 +172,12 @@ function titleCondMet(cond, ctx) { const check = TITLE_CONDS[cond?.type]; return
 // 잘못된 칭호 정의가 뽑기를 깨뜨리지 않도록 항상 감싼다.
 export function titleMet(title, ctx) { try { return titleCondMet(title.cond, ctx); } catch { return false; } }
 
-export function emptyTitleStats() { return {draws: 0, lastCardKey: '', repeatStreak: 0, dupStreak: 0, dupTotal: 0, newStreak: 0, recent: [], drawn: {}, dayKey: '', dayDraws: 0}; }
+export function emptyTitleStats() { return {draws: 0, ticketDraws: 0, lastCardKey: '', repeatStreak: 0, dupStreak: 0, dupTotal: 0, newStreak: 0, recent: [], drawn: {}, dayKey: '', dayDraws: 0}; }
 // 저장된 통계를 검증해 안전한 값으로 되돌린다(타입·범위가 틀리면 0/빈 값).
 export function cleanTitleStats(raw) {
   const stats = emptyTitleStats();
   if (!raw || typeof raw !== 'object') return stats;
-  for (const name of ['draws', 'repeatStreak', 'dupStreak', 'dupTotal', 'newStreak', 'dayDraws']) stats[name] = titleInt(raw[name]);
+  for (const name of ['draws', 'ticketDraws', 'repeatStreak', 'dupStreak', 'dupTotal', 'newStreak', 'dayDraws']) stats[name] = titleInt(raw[name]);
   if (typeof raw.lastCardKey === 'string' && raw.lastCardKey.length <= 80) stats.lastCardKey = raw.lastCardKey;
   if (typeof raw.dayKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.dayKey)) stats.dayKey = raw.dayKey;
   if (Array.isArray(raw.recent)) stats.recent = raw.recent.filter((g) => TITLE_GRADES.includes(g)).slice(-TITLE_RECENT_MAX);
@@ -187,7 +187,7 @@ export function cleanTitleStats(raw) {
 // 뽑기 한 번을 통계에 반영(순수 함수): d = {key: `${packId}:${cardId}`, grade, isNew, dayKey}
 export function nextTitleStats(s, d) {
   return {
-    draws: s.draws + 1, lastCardKey: d.key, repeatStreak: s.lastCardKey === d.key ? s.repeatStreak + 1 : 0,
+    draws: s.draws + 1, ticketDraws: (s.ticketDraws || 0) + (d.ticket ? 1 : 0), lastCardKey: d.key, repeatStreak: s.lastCardKey === d.key ? s.repeatStreak + 1 : 0,
     dupStreak: d.isNew ? 0 : s.dupStreak + 1, dupTotal: s.dupTotal + (d.isNew ? 0 : 1), newStreak: d.isNew ? s.newStreak + 1 : 0,
     recent: [...s.recent, d.grade].slice(-TITLE_RECENT_MAX), drawn: {...s.drawn, [d.grade]: (s.drawn[d.grade] || 0) + 1},
     dayKey: d.dayKey, dayDraws: s.dayKey === d.dayKey ? s.dayDraws + 1 : 1

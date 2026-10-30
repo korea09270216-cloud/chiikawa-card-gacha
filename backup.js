@@ -17,7 +17,7 @@ export const BACKUP_MAX_CODE = 20000;
 const BK_MAX_JSON = 65536;
 const BK_GRADES = ['C', 'B', 'A', 'S', 'SS', 'SSS'];
 const BK_RECENT_MAX = 120;
-const BK_INT_STATS = ['draws', 'repeatStreak', 'dupStreak', 'dupTotal', 'newStreak', 'dayDraws'];
+const BK_INT_STATS = ['draws', 'ticketDraws', 'repeatStreak', 'dupStreak', 'dupTotal', 'newStreak', 'dayDraws'];
 const BK_ID = /^[a-z][a-z0-9-]{0,39}$/, BK_PACK = /^[a-z][a-z0-9-]{0,63}$/, BK_KEY = /^[\w:.-]{0,80}$/, BK_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const bkInt = (v) => Number.isSafeInteger(v) && v >= 0 && v < 100000000;
 const bkTime = (v) => Number.isSafeInteger(v) && v > 0 && v < 8.64e15;
@@ -26,7 +26,7 @@ const bkObj = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
 const bkBad = (strict, fallback) => { if (strict) throw new Error('data'); return fallback; };
 
 function bkCleanStats(raw, strict) {
-  const out = {draws: 0, lastCardKey: '', repeatStreak: 0, dupStreak: 0, dupTotal: 0, newStreak: 0, recent: [], drawn: {C: 0, B: 0, A: 0, S: 0, SS: 0, SSS: 0}, dayKey: '', dayDraws: 0};
+  const out = {draws: 0, ticketDraws: 0, lastCardKey: '', repeatStreak: 0, dupStreak: 0, dupTotal: 0, newStreak: 0, recent: [], drawn: {C: 0, B: 0, A: 0, S: 0, SS: 0, SSS: 0}, dayKey: '', dayDraws: 0};
   if (raw == null) return out;
   if (!bkObj(raw)) return bkBad(strict, out);
   for (const name of BK_INT_STATS) if (raw[name] !== undefined) out[name] = bkInt(raw[name]) ? raw[name] : bkBad(strict, 0);
@@ -76,13 +76,13 @@ export function sanitizeSnapshot(raw) { return bkClean(raw, false); }
 function bkWire(snap) {
   const s = snap.titles.stats;
   return {v: BACKUP_VERSION, t: snap.t, p: snap.packs, e: snap.titles.earned,
-    s: {d: s.draws, r: s.repeatStreak, u: s.dupStreak, o: s.dupTotal, n: s.newStreak, y: s.dayDraws, k: s.lastCardKey, a: s.dayKey, g: s.recent.map((g) => BK_GRADES.indexOf(g)).join(''), w: BK_GRADES.map((g) => s.drawn[g] || 0)}};
+    s: {d: s.draws, q: s.ticketDraws, r: s.repeatStreak, u: s.dupStreak, o: s.dupTotal, n: s.newStreak, y: s.dayDraws, k: s.lastCardKey, a: s.dayKey, g: s.recent.map((g) => BK_GRADES.indexOf(g)).join(''), w: BK_GRADES.map((g) => s.drawn[g] || 0)}};
 }
 function bkUnwire(w) {
   const s = bkObj(w.s) ? w.s : {};
   const recent = typeof s.g === 'string' ? [...s.g].map((c) => BK_GRADES[c]) : s.g;
   const drawn = Array.isArray(s.w) ? (s.w.length === BK_GRADES.length ? Object.fromEntries(BK_GRADES.map((g, i) => [g, s.w[i]])) : null) : s.w;
-  return {v: w.v, t: w.t, packs: w.p, titles: {earned: w.e, stats: bkObj(w.s) ? {draws: s.d, repeatStreak: s.r, dupStreak: s.u, dupTotal: s.o, newStreak: s.n, dayDraws: s.y, lastCardKey: s.k, dayKey: s.a, recent, drawn} : w.s}};
+  return {v: w.v, t: w.t, packs: w.p, titles: {earned: w.e, stats: bkObj(w.s) ? {draws: s.d, ticketDraws: s.q, repeatStreak: s.r, dupStreak: s.u, dupTotal: s.o, newStreak: s.n, dayDraws: s.y, lastCardKey: s.k, dayKey: s.a, recent, drawn} : w.s}};
 }
 
 const bkText = (bytes) => { let out = ''; for (let i = 0; i < bytes.length; i += 8192) out += String.fromCharCode(...bytes.subarray(i, i + 8192)); return out; };

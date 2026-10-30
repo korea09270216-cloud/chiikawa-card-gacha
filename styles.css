@@ -218,3 +218,23 @@
 html,body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 img,svg,a,button{-webkit-user-drag:none;user-drag:none}
 textarea,input[type=text],input[type=search]{-webkit-user-select:text;user-select:text}
+
+/* Guaranteed-S ticket: a small switch under the sealed pack, and a one-line note above the result card. */
+.ticket-bar{position:absolute;z-index:7;left:50%;top:calc(50% - var(--pack-width)*.875 - 52px);transform:translateX(-50%);margin:0;max-width:92vw}
+.ticket-toggle{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:999px;border:1px solid #d4c08e30;background:#0009;backdrop-filter:blur(6px);color:#a89e86;font:inherit;font-size:11.5px;letter-spacing:.3px;white-space:nowrap;cursor:pointer}
+.ticket-toggle b{font-weight:700;color:#e8dcb8}
+.ticket-toggle:disabled{cursor:default;opacity:.85}
+.ticket-toggle[aria-pressed=true]{color:#ffe7a8;border-color:#f0c868aa;background:linear-gradient(#3a2b0ecc,#1c1405cc);box-shadow:0 0 18px #f0b84855}
+.ticket-toggle[aria-pressed=true] b{color:#fff3c9}
+.ticket-toggle:not(:disabled):hover{border-color:#f0c868}
+#scene[data-ticket=on][data-phase=sealed] .pack-position:after{content:'';position:absolute;inset:-14% -34%;z-index:-1;pointer-events:none;background:radial-gradient(closest-side,rgb(255 205 110/.42),rgb(255 190 90/.16) 55%,transparent);animation:ticket-glow 2.4s ease-in-out infinite alternate}
+@keyframes ticket-glow{from{opacity:.55}to{opacity:1}}
+.ticket-note{display:none;position:absolute;z-index:7;left:50%;top:calc(50% - 15px - var(--card-width)*.6984 - 36px);translate:-50% 0;width:min(92vw,440px);margin:0;text-align:center;font-size:12px;letter-spacing:.3px;color:#a89e86;text-shadow:0 1px 8px #000;pointer-events:none;opacity:0}
+.ticket-note[data-kind=gain]{font-size:13.5px;font-weight:700;color:#ffe7a8;text-shadow:0 0 14px #f0b848aa,0 1px 8px #000}
+.ticket-note[data-kind=used]{color:#e8dcb8}
+#scene[data-view=result][data-phase=revealed]:not(.previewing) .ticket-note.show{display:block;animation:ticket-note-in .7s ease .6s both}
+.ticket-note[data-kind=gain].show{animation:ticket-note-in .7s ease .6s both,ticket-note-pop 1.6s ease 1.3s 1}
+@keyframes ticket-note-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+@keyframes ticket-note-pop{0%,100%{filter:none}40%{filter:brightness(1.5) drop-shadow(0 0 10px #ffd36b)}}
+@media(max-height:500px){.ticket-bar{left:auto;right:16px;top:auto;bottom:16px;transform:none}.ticket-note{top:calc(50% - 15px - var(--card-width)*.6984 - 26px)}}
+@media(prefers-reduced-motion:reduce){#scene[data-ticket=on] .pack-position:after{animation:none}#scene[data-view=result] .ticket-note.show,.ticket-note[data-kind=gain].show{animation:none;opacity:1}}

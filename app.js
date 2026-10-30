@@ -2,8 +2,8 @@ import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=15';
 import { boxMarkup } from './box3d.js?v=15';
 import { refreshMagnetic, burstLight, resetEffects, stopFx, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain, playTitle } from './effects.js?v=15';
 import './grades.js?v=15';
-import { TITLES, TITLE_UI, QUIPS, titleMet, pickQuip, cleanTitleStats, nextTitleStats, emptyTitleStats } from './titles.js?v=15';
-import { encodeSave, decodeSave, mergeSnapshots, sanitizeSnapshot, summarize, diffSnapshots, foreignPacks } from './backup.js?v=15';
+import { TITLES, TITLE_UI, QUIPS, titleMet, pickQuip, cleanTitleStats, nextTitleStats, emptyTitleStats } from './titles.js?v=21';
+import { encodeSave, decodeSave, mergeSnapshots, sanitizeSnapshot, summarize, diffSnapshots, foreignPacks } from './backup.js?v=21';
 
 const $ = (selector) => document.querySelector(selector);
 // Keyboard modality flag: the focus ring only shows while the keyboard is in use (see styles.css).
@@ -76,6 +76,7 @@ function syncNavigation() {
   $('#backup-open').hidden = !stable() || !['packs','collection','titles'].includes(view);
   // One top-left way out of every screen: back to the pack list.
   $('#choose-bundle').hidden = view==='packs' || !stable();
+  renderTicketBar();
 }
 function later(callback,delay) {
   const token=sequence;
@@ -101,9 +102,10 @@ function randomInt(size) {
   return values[0]%size;
 }
 // pack.rates 가 있으면 등급을 가중 추첨(0.01 단위)한 뒤 그 등급 카드 중 균등 추첨. 없거나 쓸 수 없는 값이면 팩 전체 균등 추첨.
-function randomCard(pack=activePack) {
-  const tiers=Object.entries(pack.rates||{}).map(([grade,rate])=>[grade,Math.round(Number(rate)*100)||0]).filter(([grade,weight])=>weight>0 && pack.cards.some((card)=>gradeOf(card)===grade));
-  if(!tiers.length)return pack.cards[randomInt(pack.cards.length)];
+// only: 이 등급들 안에서만 뽑는다(확정 뽑기권). 같은 등급 확률 비율은 그대로 유지된다.
+function randomCard(pack=activePack,only=null) {
+  const tiers=Object.entries(pack.rates||{}).map(([grade,rate])=>[grade,Math.round(Number(rate)*100)||0]).filter(([grade,weight])=>weight>0 && (!only || only.includes(grade)) && pack.cards.some((card)=>gradeOf(card)===grade));
+  if(!tiers.length){const pool=only ? pack.cards.filter((card)=>only.includes(gradeOf(card))) : [];const cards=pool.length ? pool : pack.cards;return cards[randomInt(cards.length)];}
   let roll=randomInt(tiers.reduce((sum,[,weight])=>sum+weight,0)),grade=tiers[tiers.length-1][0];
   for(const [name,weight] of tiers){if(roll<weight){grade=name;break;}roll-=weight;}
   const pool=pack.cards.filter((card)=>gradeOf(card)===grade);
@@ -257,12 +259,39 @@ function mergeTitleState(a,b) {
   for(const [id,at] of Object.entries(b.earned))earned[id]=Math.min(earned[id]??at,at);
   return {earned,stats:b.stats.draws>a.stats.draws ? b.stats : a.stats};
 }
-let titleState=readTitleState(),pendingDraw={won:[],quip:''};
+let titleState=readTitleState(),pendingDraw={won:[],quip:'',ticket:null};
+// ---- 확정 뽑기권: 일반 뽑기 10번마다 1장, 쓰면 S 이상이 확정된다. 따로 저장하지 않고 통계(draws·ticketDraws)에서 계산하므로 저장 코드에도 그대로 실린다. ----
+// 뽑기권으로 뽑은 횟수(ticketDraws)는 10번 세기에서 빼고, 보유 수 = 일반 뽑기 10번 묶음 수 - 쓴 수.
+const TICKET_EVERY=10,TICKET_GRADES=['S','SS','SSS'];let useTicket=true;
+function ticketInfo(stats=titleState.stats) {
+  const used=stats.ticketDraws||0,normal=Math.max(0,stats.draws-used),earned=Math.floor(normal/TICKET_EVERY);
+  return {earned,balance:Math.max(0,earned-used),progress:normal%TICKET_EVERY};
+}
+const ticketReady = () => useTicket && ticketInfo().balance>0 && activePack.cards.some((card)=>TICKET_GRADES.includes(gradeOf(card)));
+function renderTicketBar() {
+  const show=phase==='sealed' && view==='pack',bar=$('#ticket-bar');
+  bar.hidden=!show;scene.dataset.ticket='';
+  if(!show)return;
+  const {balance,progress}=ticketInfo(),button=$('#ticket-toggle'),on=useTicket && balance>0;
+  button.disabled=balance===0;button.setAttribute('aria-pressed',String(on));
+  button.innerHTML=balance>0 ? `<span aria-hidden="true">◆</span> S 이상 확정 뽑기권 <b>${balance}장</b> · ${on?'사용 중':'꺼짐'}` : `S 이상 확정 뽑기권까지 <b>${progress} / ${TICKET_EVERY}</b>`;
+  if(on)scene.dataset.ticket='on';
+}
+function showTicketNote(info) {
+  const note=$('#ticket-note');note.classList.remove('show');note.textContent='';
+  if(!info)return;
+  note.textContent=info.gained ? `◆ S 이상 확정 뽑기권 +${info.gained} · 보유 ${info.balance}장` : info.used ? `◆ 확정 뽑기권 사용 · 남은 ${info.balance}장` : `확정 뽑기권까지 ${info.progress} / ${TICKET_EVERY}`;
+  note.dataset.kind=info.gained ? 'gain' : info.used ? 'used' : 'progress';
+  void note.offsetWidth;note.classList.add('show');
+}
+$('#ticket-toggle').addEventListener('click',()=>{useTicket=!useTicket;prepared=null;renderTicketBar();});
+
 const recentQuips=[]; // the last few lines shown (this session only), so the same line never comes twice in a row
 // Called once per counted draw (revealCard): updates the stats, awards newly met titles, saves, and picks this draw's one-liner. Returns {won: new titles, quip}.
-function recordTitles(pack,card,counts,index,isNew) {
+function recordTitles(pack,card,counts,index,isNew,ticket=false) {
   titleState=mergeTitleState(titleState,readTitleState());
-  const when=new Date(),grade=gradeOf(card),stats=nextTitleStats(titleState.stats,{key:`${pack.id}:${card.id}`,grade,isNew,dayKey:`${when.getFullYear()}-${pad2(when.getMonth()+1)}-${pad2(when.getDate())}`});
+  const before=ticketInfo(titleState.stats);
+  const when=new Date(),grade=gradeOf(card),stats=nextTitleStats(titleState.stats,{key:`${pack.id}:${card.id}`,grade,isNew,ticket,dayKey:`${when.getFullYear()}-${pad2(when.getMonth()+1)}-${pad2(when.getDate())}`});
   const ctx={stats,card,grade,index,isNew,pack,counts,hour:when.getHours()},earned={...titleState.earned};
   const won=TITLES.filter((title)=>!(earned[title.id]>0) && titleMet(title,ctx));
   won.forEach((title)=>{earned[title.id]=when.getTime();});
@@ -271,11 +300,13 @@ function recordTitles(pack,card,counts,index,isNew) {
   let quip='';
   try{quip=pickQuip(ctx,QUIPS,recentQuips);}catch{/* A broken quip table must not break the draw. */}
   if(quip)recentQuips.push(quip);if(recentQuips.length>4)recentQuips.shift();
-  return {won,quip};
+  const after=ticketInfo(stats);
+  return {won,quip,ticket:{used:ticket,gained:Math.max(0,after.earned-before.earned),balance:after.balance,progress:after.progress}};
 }
 // The one-liner under the result card (CSS fades it in); also read out through the live region.
 function showQuip(quip) {
   $('#quip').textContent=quip;
+  if(!quip)showTicketNote(null);
   if(quip){scene.setAttribute('data-quip','');$('#announcement').textContent+=` ${quip}`;}else scene.removeAttribute('data-quip');
 }
 function applyTitleUi() {
@@ -572,11 +603,11 @@ backup.addEventListener('keydown',(event)=>{
 });
 
 function finishReveal(card,isNew) {
-  live=null;const {won,quip}=pendingDraw;pendingDraw={won:[],quip:''};
+  live=null;const {won,quip,ticket}=pendingDraw;pendingDraw={won:[],quip:'',ticket:null};
   setPhase('revealed');setView('result');$('#pack-position').hidden=true;packButton.removeAttribute('aria-busy');
   syncNavigation();$('#announcement').textContent=`${card.name} ${gradeOf(card)} 카드가 나타났습니다.${isNew?' 처음 만난 카드입니다.':''}`;
   $('#card-list').focus({preventScroll:true});refreshMagnetic();
-  showQuip(quip);
+  showQuip(quip);showTicketNote(ticket);
   if(won.length)openTitleToast(won);
 }
 function revealCard(card,image,instant=false) {
@@ -585,7 +616,7 @@ function revealCard(card,image,instant=false) {
   counts[index]++;collectionUnlocked=true;
   try{localStorage.setItem(activePack.storageKey,JSON.stringify({version:1,counts}));}catch{/* Download remains available without storage. */}
   if(live){live.counted=true;live.isNew=isNew;}
-  pendingDraw=recordTitles(activePack,card,counts,index,isNew);
+  pendingDraw=recordTitles(activePack,card,counts,index,isNew,Boolean(live?.ticket));
   if(isNew)$('#reveal-zone .card-magnetic')?.setAttribute('data-new','');
   burstLight(instant?.5:.9);playReveal();
   if(instant)finishReveal(card,isNew);
@@ -602,7 +633,9 @@ function skipOpening() {
   revealCard(card,image,true);
 }
 function prepareDraw() {
-  if(!prepared){const card=randomCard(),load=loadCard(card);load.catch(()=>{});prepared={card,load};}
+  const ticket=ticketReady();
+  if(prepared && prepared.ticket!==ticket)prepared=null; // the ticket was switched on / off after the card was already picked
+  if(!prepared){const card=randomCard(activePack,ticket ? TICKET_GRADES : null),load=loadCard(card);load.catch(()=>{});prepared={card,load,ticket};}
   return prepared;
 }
 function setTear(progress,dir=1) {
@@ -629,7 +662,7 @@ async function openPack({dragged=false}={}) {
   try{
     const card=draw.card,image=await draw.load;if(token!==sequence)return;
     $('#pack-position').classList.remove('pack-arriving');
-    const T=timingOf(gradeOf(card));applyGrade(gradeOf(card));live={card,image,counted:false,isNew:false};
+    const T=timingOf(gradeOf(card));applyGrade(gradeOf(card));live={card,image,counted:false,isNew:false,ticket:draw.ticket};
     const tear=()=>{
       setPhase('tearing');scene.classList.remove('charging','dragging');scene.classList.add('torn');playRip();burstLight(.18);
       // The card slides up out of the torn top while the empty pack is thrown away downwards (CSS, driven by --t-* of the grade).
