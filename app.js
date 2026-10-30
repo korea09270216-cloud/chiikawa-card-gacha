@@ -1,9 +1,9 @@
-import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=15';
-import { boxMarkup } from './box3d.js?v=15';
-import { refreshMagnetic, burstLight, resetEffects, stopFx, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain, playTitle } from './effects.js?v=15';
-import './grades.js?v=15';
-import { TITLES, TITLE_UI, QUIPS, titleMet, pickQuip, cleanTitleStats, nextTitleStats, emptyTitleStats } from './titles.js?v=21';
-import { encodeSave, decodeSave, mergeSnapshots, sanitizeSnapshot, summarize, diffSnapshots, foreignPacks } from './backup.js?v=21';
+import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=32';
+import { boxMarkup } from './box3d.js?v=32';
+import { refreshMagnetic, burstLight, resetEffects, stopFx, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain, playTitle } from './effects.js?v=32';
+import './grades.js?v=32';
+import { TITLES, TITLE_UI, QUIPS, titleMet, pickQuip, cleanTitleStats, nextTitleStats, emptyTitleStats } from './titles.js?v=32';
+import { encodeSave, decodeSave, mergeSnapshots, sanitizeSnapshot, summarize, diffSnapshots, foreignPacks } from './backup.js?v=32';
 
 const $ = (selector) => document.querySelector(selector);
 // Keyboard modality flag: the focus ring only shows while the keyboard is in use (see styles.css).

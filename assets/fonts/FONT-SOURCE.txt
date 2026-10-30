@@ -1,5 +1,5 @@
 title-display.woff2 = Hahmlet Black (wght 900) 서브셋
 원본: https://raw.githubusercontent.com/google/fonts/main/ofl/hahmlet/Hahmlet[wght].ttf
 라이선스: SIL Open Font License 1.1 (OFL.txt)
-글자: titles.js 의 칭호 이름 14개 + 영문/숫자/기호 + 티어 라벨, 생성일 2026-10-30
+글자: titles.js 의 칭호 이름 48개 + 영문/숫자/기호 + 티어 라벨, 생성일 2026-10-30
 재생성: python tools/make-title-font.py --family hahmlet
