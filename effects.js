@@ -319,3 +319,12 @@ export function playTearGrain(progress){
     source.connect(filter).connect(gain).connect(out(ac));source.start();
   }catch{}
 }
+// Title unlocked: a short bell chime that starts with the popup's entrance; higher tiers add notes and ring longer (quiet, no boom).
+const TITLE_CHIME={common:[783.99,1174.66],rare:[783.99,987.77,1318.51],epic:[659.25,880,1318.51,1760],legend:[523.25,783.99,1046.5,1568,2093.01]};
+export function playTitle(tier){
+  const ac=getAudio();if(!ac)return;
+  try{
+    const notes=TITLE_CHIME[tier]||TITLE_CHIME.common,dest=out(ac),at=ac.currentTime+.4;
+    notes.forEach((frequency,i)=>ping(ac,dest,frequency,at+i*.085,.042,.75+i*.12));
+  }catch{}
+}

@@ -8,11 +8,12 @@
   <title>CHIIKAWA — CARD PACK</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23000'/%3E%3Cpath d='M32 8 38 26 56 32 38 38 32 56 26 38 8 32 26 26Z' fill='%23e7ca82'/%3E%3C/svg%3E">
   <link rel="preload" href="assets/chiikawa-box-front.webp" as="image">
-  <link rel="stylesheet" href="styles.css?v=10">
-  <link rel="stylesheet" href="box3d.css?v=10">
-  <link rel="stylesheet" href="card-shine.css?v=10">
-  <link rel="stylesheet" href="grade-fx.css?v=10">
-  <script src="app.js?v=10" type="module"></script>
+  <link rel="stylesheet" href="styles.css?v=11">
+  <link rel="stylesheet" href="box3d.css?v=11">
+  <link rel="stylesheet" href="card-shine.css?v=11">
+  <link rel="stylesheet" href="grade-fx.css?v=11">
+  <link rel="stylesheet" href="titles.css?v=11">
+  <script src="app.js?v=11" type="module"></script>
 </head>
 <body>
   <main id="scene" data-phase="packs" data-view="packs" aria-label="우주 속 카드 꾸러미와 카드팩">
@@ -21,8 +22,7 @@
     <div class="radiance" aria-hidden="true"></div>
     <div class="light-bloom" aria-hidden="true"></div>
     <div class="shockwave" aria-hidden="true"></div>
-    <button id="choose-bundle" class="quiet-button bundle-back" hidden><span aria-hidden="true">←</span> 꾸러미 선택</button>
-    <button id="pack-list-open" class="quiet-button pack-list-link" aria-controls="pack-list" hidden>카드팩 목록 <span aria-hidden="true">▤</span></button>
+    <button id="choose-bundle" class="quiet-button bundle-back" hidden><span aria-hidden="true">←</span> 카드팩 목록</button>
     <section id="bundle-stage" aria-label="카드 꾸러미" hidden></section>
     <div class="pack-position" id="pack-position" hidden>
       <div class="pack-float">
@@ -34,6 +34,7 @@
             <span class="pack-glint" aria-hidden="true"></span>
             <span class="tear-light" aria-hidden="true"></span>
             <span class="tear-spark" aria-hidden="true"></span>
+            <span class="tear-guide" aria-hidden="true"><span class="tg-line"></span><span class="tg-hand"><i></i></span></span>
           </span>
         </button>
       </div>
@@ -48,14 +49,25 @@
     <section id="collection-panel" aria-labelledby="collection-title" hidden>
       <div class="collection-inner">
         <div class="collection-heading"><h2 id="collection-title" tabindex="-1">카드 목록</h2><p id="collection-count"></p></div>
+        <div class="list-switch" role="group" aria-label="목록 전환"><button type="button" data-list-switch="cards" aria-pressed="true">카드 목록</button><button type="button" data-list-switch="titles" aria-pressed="false">칭호 목록</button></div>
         <div id="pack-tabs" role="group" aria-label="카드팩별 목록"></div>
         <div id="grade-chips" role="group" aria-label="등급으로 이동" hidden></div>
         <p id="collection-summary"></p>
         <div id="collection-grid"></div>
       </div>
     </section>
+    <section id="title-panel" aria-labelledby="title-heading" hidden>
+      <div class="collection-inner">
+        <div class="collection-heading"><h2 id="title-heading" tabindex="-1">칭호 목록</h2><p id="title-count"></p></div>
+        <div class="list-switch" role="group" aria-label="목록 전환"><button type="button" data-list-switch="cards" aria-pressed="false">카드 목록</button><button type="button" data-list-switch="titles" aria-pressed="true">칭호 목록</button></div>
+        <p id="title-summary"></p>
+        <div id="title-grid"></div>
+      </div>
+    </section>
+    <p id="quip" class="quip"></p>
     <div id="result-actions" hidden>
       <button id="card-list" class="quiet-button" aria-controls="collection-panel" aria-expanded="false">카드 목록 <span aria-hidden="true">▦</span></button>
+      <button id="title-list" class="quiet-button" aria-controls="title-panel" hidden>칭호 목록 <span aria-hidden="true">★</span></button>
       <button id="next-pack" class="quiet-button">카드뽑기 <span aria-hidden="true">↻</span></button>
       <a id="save-card" class="quiet-button" download hidden>카드 저장 <span aria-hidden="true">↓</span></a>
     </div>
@@ -65,6 +77,18 @@
     <p id="announcement" class="sr-only" role="status" aria-live="polite"></p>
     <p id="message" role="status" aria-live="polite"></p>
   </main>
+  <div id="title-toast" class="title-toast" hidden>
+    <div class="tt-panel" role="dialog" aria-modal="true" aria-labelledby="tt-header" aria-describedby="tt-line" tabindex="-1" data-tier="common">
+      <span class="tt-spark" aria-hidden="true"></span><span class="tt-spark" aria-hidden="true"></span><span class="tt-spark" aria-hidden="true"></span><span class="tt-spark" aria-hidden="true"></span><span class="tt-spark" aria-hidden="true"></span><span class="tt-spark" aria-hidden="true"></span>
+      <p class="tt-eyebrow"><span id="tt-eyebrow"></span> <small id="tt-index"></small></p>
+      <h2 class="tt-header" id="tt-header"></h2>
+      <p class="tt-flavor" id="tt-flavor"></p>
+      <p class="tt-sub" id="tt-sub" hidden></p>
+      <p class="tt-line" id="tt-line"></p>
+      <p class="tt-more" id="tt-more" hidden></p>
+      <div class="tt-actions"><button type="button" id="title-ok" class="tt-ok"></button><button type="button" id="title-open" class="tt-open"></button></div>
+    </div>
+  </div>
   <noscript>팩을 뜯으려면 브라우저에서 JavaScript를 켜주세요.</noscript>
 </body>
 </html>

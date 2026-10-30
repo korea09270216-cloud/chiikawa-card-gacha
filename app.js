@@ -1,12 +1,14 @@
-import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=10';
-import { boxMarkup } from './box3d.js?v=10';
-import { refreshMagnetic, burstLight, resetEffects, stopFx, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain } from './effects.js?v=10';
-import './grades.js?v=10';
+import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=11';
+import { boxMarkup } from './box3d.js?v=11';
+import { refreshMagnetic, burstLight, resetEffects, stopFx, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain, playTitle } from './effects.js?v=11';
+import './grades.js?v=11';
+import { TITLES, TITLE_UI, QUIPS, titleMet, pickQuip, cleanTitleStats, nextTitleStats, emptyTitleStats } from './titles.js?v=11';
 
 const $ = (selector) => document.querySelector(selector);
 // Keyboard modality flag: the focus ring only shows while the keyboard is in use (see styles.css).
 document.addEventListener('keydown',()=>{document.documentElement.dataset.kbd='1';},true);
 document.addEventListener('pointerdown',()=>{delete document.documentElement.dataset.kbd;},true);
+try{if(localStorage.getItem('chiikawa-drag-tear-v1'))document.documentElement.dataset.tearKnown='1';}catch{/* Storage is optional. */}
 const scene = $('#scene');
 const packButton = $('#pack-button');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -21,6 +23,7 @@ let sequence = 0;
 const timers = new Set();
 const packPosition = $('#pack-position');
 const TEAR_DONE = .82;
+const TEAR_SWEEP = 700;
 let prepared = null;
 let drag = null;
 let suppressClick = false;
@@ -54,21 +57,23 @@ for (const pack of PACK_SETS) countsByPack.set(pack.id,readCounts(pack));
 let collectionUnlocked = [...countsByPack.values()].some((counts)=>counts.some((count)=>count>0));
 collectionPackId=(PACK_SETS.find((pack)=>countsByPack.get(pack.id).some((count)=>count>0)) || activePack).id;
 const getCounts = (pack=activePack) => countsByPack.get(pack.id);
-const stable = () => ['bundles','packs','sealed','revealed','collection'].includes(phase);
+const stable = () => ['bundles','packs','sealed','revealed','collection','titles'].includes(phase);
 
 function setPhase(next) { phase=next;scene.dataset.phase=next; }
 function setView(next) { view=next;scene.dataset.view=next; }
 function syncNavigation() {
   $('#result-actions').hidden = !stable() || ((view==='bundles' || view==='packs') && !collectionUnlocked);
   // 'Draw again' only makes sense once a card has been drawn (result) or while browsing the collection; on the box / sealed-pack screens the pack itself is the action.
-  $('#next-pack').hidden = view!=='result' && view!=='collection';
+  $('#next-pack').hidden = view!=='result' && view!=='collection' && view!=='titles';
   // Pack list is the first screen; its twin button is redundant there and on the box screen (whose back button leads to it).
-  $('#pack-list-open').hidden = !stable() || view==='packs' || view==='bundles';
-  $('#card-list').hidden = !collectionUnlocked;
+  // The first screen lists cards per pack (a link on every pack tile), so its global button would be a duplicate.
+  $('#card-list').hidden = !collectionUnlocked || view==='packs';
+  // Title list link: the three entry screens only (the result bar is full; the two lists switch with their tabs).
+  $('#title-list').hidden = !collectionUnlocked || !['packs','bundles','pack'].includes(view);
   $('#card-list').setAttribute('aria-expanded',String(view==='collection'));
   $('#save-card').hidden = view!=='result' || !selectedCard || phase!=='revealed';
+  // One top-left way out of every screen: back to the pack list.
   $('#choose-bundle').hidden = view==='packs' || !stable();
-  $('#choose-bundle').innerHTML = `<span aria-hidden="true">←</span> ${view==='bundles' ? '카드팩 목록' : '꾸러미 선택'}`;
 }
 function later(callback,delay) {
   const token=sequence;
@@ -173,7 +178,7 @@ function openBundle(stage,choice) {
 // Pack list -> box screen: the list fades away and the chosen pack's single box takes its place.
 function pickPack(pack) {
   activePack=pack;collectionPackId=pack.id;cancelPending();setPhase('selecting');syncNavigation();
-  document.querySelectorAll('.pack-pick').forEach((button)=>button.disabled=true);
+  document.querySelectorAll('#pack-grid button').forEach((button)=>button.disabled=true);
   setPackImage(pack);$('#pack-list').classList.add('departing');
   later(()=>{
     $('#pack-list').hidden=true;$('#pack-list').classList.remove('departing');$('#pack-grid').replaceChildren();
@@ -212,7 +217,9 @@ function buildCard(preview=false) {
   const entrance=$('#reveal-zone .card-entrance'),cardW=entrance?.offsetWidth,packW=packPosition.offsetWidth,packH=packPosition.offsetHeight;
   if(!preview && cardW && packW){
     const scale=Math.min(.86,packW*.78/cardW),cardH=cardW*1056/756*scale;
-    entrance.style.setProperty('--rise-s',scale.toFixed(3));entrance.style.setProperty('--rise-out',`${(-packH*.395-cardH*.2).toFixed(1)}px`);
+    // ~14% of the card is still in the mouth when the slide ends; never push its top edge off the screen.
+    const out=Math.max(-packH*.395-cardH*.36,-(innerHeight/2-15-cardH/2-8));
+    entrance.style.setProperty('--rise-s',scale.toFixed(3));entrance.style.setProperty('--rise-out',`${out.toFixed(1)}px`);
   }
 }
 function fillCardFront(card,image) {
@@ -221,11 +228,142 @@ function fillCardFront(card,image) {
   selectedCard={packId:activePack.id,card};
   $('#save-card').href=card.image;$('#save-card').download=`${card.name}_${gradeOf(card)}.png`;
 }
+// ---- 칭호: 저장(chiikawa-titles-v1) · 판정(titles.js) · 획득 팝업 · 목록 ----
+// 저장: {version:1,earned:{[id]:획득 시각(ms)},stats:{...}}. 읽기/쓰기는 항상 try/catch, 값은 검증하고, 다른 탭의 기록과는 합쳐서(earned 합집합) 덮어쓰지 않는다.
+const TITLE_KEY='chiikawa-titles-v1',TITLE_TIERS=['common','rare','epic','legend'],toast=$('#title-toast'),toastPanel=toast.querySelector('.tt-panel');
+const UI_DEFAULT={toastEyebrow:'TITLE UNLOCKED',toastHeader:'칭호 획득!',toastLine:'새로운 칭호 [ {name} ] 를 획득했습니다!',toastClose:'확인',toastGoList:'칭호 목록 보기',listTitle:'칭호 목록',listCount:'획득 {n} / {total}',lockedLabel:'미획득',lockedHiddenName:'???',titleListSubtitle:'',tabCards:'카드 목록',tabTitles:'칭호 목록',tierLabels:{common:'COMMON',rare:'RARE',epic:'EPIC',legend:'LEGEND'},earnedOn:'{date} 획득',moreNote:'외 {n}개의 칭호도 획득했어요'};
+const ui = (key) => TITLE_UI?.[key] ?? UI_DEFAULT[key];
+const fill = (text,values) => String(text).replace(/\{(\w+)\}/g,(match,key)=>key in values ? values[key] : match);
+const tierOf = (title) => TITLE_TIERS.includes(title.tier) ? title.tier : 'common';
+const pad2 = (n) => String(n).padStart(2,'0');
+const titleDate = (at) => { const date=new Date(at);return `${date.getFullYear()}.${pad2(date.getMonth()+1)}.${pad2(date.getDate())}`; };
+function readTitleState() {
+  const state={earned:{},stats:emptyTitleStats()};
+  try{
+    const stored=JSON.parse(localStorage.getItem(TITLE_KEY));
+    if(stored?.version===1){
+      state.stats=cleanTitleStats(stored.stats);
+      if(stored.earned && typeof stored.earned==='object')for(const [id,at] of Object.entries(stored.earned))if(/^[a-z][a-z0-9-]{0,39}$/.test(id) && Number.isFinite(at) && at>0 && at<8.64e15)state.earned[id]=at;
+    }
+  }catch{/* Titles stay usable with unavailable or invalid storage. */}
+  return state;
+}
+// Titles only ever get earned: union of earned ids (earliest time wins); the stats of the tab that has drawn more.
+function mergeTitleState(a,b) {
+  const earned={...a.earned};
+  for(const [id,at] of Object.entries(b.earned))earned[id]=Math.min(earned[id]??at,at);
+  return {earned,stats:b.stats.draws>a.stats.draws ? b.stats : a.stats};
+}
+let titleState=readTitleState(),pendingDraw={won:[],quip:''};
+const recentQuips=[]; // the last few lines shown (this session only), so the same line never comes twice in a row
+// Called once per counted draw (revealCard): updates the stats, awards newly met titles, saves, and picks this draw's one-liner. Returns {won: new titles, quip}.
+function recordTitles(pack,card,counts,index,isNew) {
+  titleState=mergeTitleState(titleState,readTitleState());
+  const when=new Date(),grade=gradeOf(card),stats=nextTitleStats(titleState.stats,{key:`${pack.id}:${card.id}`,grade,isNew,dayKey:`${when.getFullYear()}-${pad2(when.getMonth()+1)}-${pad2(when.getDate())}`});
+  const ctx={stats,card,grade,index,isNew,pack,counts,hour:when.getHours()},earned={...titleState.earned};
+  const won=TITLES.filter((title)=>!(earned[title.id]>0) && titleMet(title,ctx));
+  won.forEach((title)=>{earned[title.id]=when.getTime();});
+  titleState={earned,stats};
+  try{localStorage.setItem(TITLE_KEY,JSON.stringify({version:1,earned,stats}));}catch{/* The titles still show this session. */}
+  let quip='';
+  try{quip=pickQuip(ctx,QUIPS,recentQuips);}catch{/* A broken quip table must not break the draw. */}
+  if(quip)recentQuips.push(quip);if(recentQuips.length>4)recentQuips.shift();
+  return {won,quip};
+}
+// The one-liner under the result card (CSS fades it in); also read out through the live region.
+function showQuip(quip) {
+  $('#quip').textContent=quip;
+  if(quip){scene.setAttribute('data-quip','');$('#announcement').textContent+=` ${quip}`;}else scene.removeAttribute('data-quip');
+}
+function applyTitleUi() {
+  document.querySelectorAll('[data-list-switch=cards]').forEach((button)=>{button.textContent=ui('tabCards');});
+  document.querySelectorAll('[data-list-switch=titles]').forEach((button)=>{button.textContent=ui('tabTitles');});
+  $('#title-heading').textContent=ui('listTitle');$('#title-list').innerHTML=`${escapeHTML(ui('tabTitles'))} <span aria-hidden="true">★</span>`;
+  $('#title-ok').textContent=ui('toastClose');$('#title-open').textContent=ui('toastGoList');
+}
+
+// 획득 팝업: 화면 가운데 모달. 한 번에 하나씩 큐(최대 3개, 나머지는 "외 N개")로 보여 주고, 탭/클릭/확인은 다음으로, Esc 는 전부 닫기, 5초 뒤 자동으로 넘어간다.
+const TOAST_DELAY=450,TOAST_HOLD=5000;
+let toastQueue=[],toastTotal=0,toastMore=0,toastReturn=null,toastTimer=0,toastHover=false,toastShownAt=0;
+function armToast(ms) {
+  clearTimeout(toastTimer);
+  // Keyboard users, a hovered panel and the focused "list" link keep the popup open until they act (no timeout for them).
+  toastTimer=setTimeout(()=>{if(toast.hidden || document.documentElement.dataset.kbd || toastHover || document.activeElement===$('#title-open'))return;nextTitleToast();},ms);
+}
+function showTitleToast() {
+  const title=toastQueue[0];if(!title)return dismissTitleToast();
+  const tier=tierOf(title),last=toastQueue.length===1,name=escapeHTML(title.name);
+  toastPanel.dataset.tier=tier;
+  $('#tt-eyebrow').textContent=ui('toastEyebrow');$('#tt-index').textContent=toastTotal>1 ? `${toastTotal-toastQueue.length+1} / ${toastTotal}` : '';
+  $('#tt-header').textContent=ui('toastHeader');$('#tt-flavor').textContent=title.flavor;
+  $('#tt-sub').textContent=title.sub||'';$('#tt-sub').hidden=!title.sub;
+  // The title name (with its [ ] if the template has them) is the gold part of the sentence.
+  $('#tt-line').innerHTML=escapeHTML(ui('toastLine')).replace(/(\[\s*)?\{name\}(\s*\])?/,(match,open,close)=>`<b>${open||''}${name}${close||''}</b>`);
+  $('#tt-more').textContent=last && toastMore ? fill(ui('moreNote'),{n:toastMore}) : '';$('#tt-more').hidden=!(last && toastMore);
+  toast.classList.remove('is-in');void toast.offsetWidth;toast.classList.add('is-in');
+  toastShownAt=performance.now();playTitle(tier);
+  $('#title-ok').focus({preventScroll:true});armToast((reducedMotion.matches ? 0 : TOAST_DELAY)+TOAST_HOLD);
+}
+function openTitleToast(won) {
+  const rank = (title) => TITLE_TIERS.indexOf(tierOf(title));
+  // Best three win a slot, shown from the lowest to the highest tier so the climax comes last.
+  toastQueue=won.slice().sort((a,b)=>rank(b)-rank(a)).slice(0,3).reverse();toastTotal=toastQueue.length;toastMore=won.length-toastTotal;
+  toastReturn=document.activeElement;toastHover=false;
+  toast.hidden=false;scene.setAttribute('inert','');scene.setAttribute('aria-hidden','true');
+  $('#announcement').textContent+=` ${ui('toastHeader')} ${toastQueue.map((title)=>title.name).join(', ')}`;
+  showTitleToast();
+}
+function nextTitleToast() { toastQueue.shift();toastQueue.length ? showTitleToast() : dismissTitleToast(); }
+// Closes the popup (and drops the rest of the queue). restoreFocus=false when the caller moves focus itself (screen changes).
+function dismissTitleToast(restoreFocus=true) {
+  clearTimeout(toastTimer);toastQueue=[];toastHover=false;
+  if(toast.hidden)return;
+  toast.hidden=true;toast.classList.remove('is-in');scene.removeAttribute('inert');scene.removeAttribute('aria-hidden');
+  const back=toastReturn;toastReturn=null;
+  if(restoreFocus)(back && back.isConnected!==false && !back.hidden ? back : $('#card-list')).focus({preventScroll:true});
+}
+toast.addEventListener('click',(event)=>{
+  if(performance.now()-toastShownAt<TOAST_DELAY+150 && !reducedMotion.matches)return; // a stray tap during the entrance must not skip it unseen
+  if(event.target.closest('#title-open')){dismissTitleToast(false);showTitles();}else nextTitleToast();
+});
+toast.addEventListener('keydown',(event)=>{
+  if(event.key!=='Tab')return;
+  const first=$('#title-ok'),last=$('#title-open'),edge=event.shiftKey ? first : last;
+  if(document.activeElement===edge || !toast.contains(document.activeElement)){event.preventDefault();(event.shiftKey ? last : first).focus({preventScroll:true});}
+});
+toastPanel.addEventListener('pointerenter',()=>{toastHover=true;clearTimeout(toastTimer);});
+toastPanel.addEventListener('pointerleave',()=>{toastHover=false;if(!toast.hidden)armToast(2500);});
+
+// 칭호 목록: 획득 = 이름·대사·조건·획득일(+ tier 장식), 미획득 = 검은 카드 + ? + ???(칭호는 전부 히든: 이름·대사·조건·힌트 모두 DOM 에 넣지 않는다).
+function renderTitles() {
+  titleState=mergeTitleState(titleState,readTitleState());
+  const have=TITLES.filter((title)=>titleState.earned[title.id]>0).length;
+  $('#title-count').textContent=fill(ui('listCount'),{n:have,total:TITLES.length});
+  $('#title-summary').textContent=ui('titleListSubtitle');
+  $('#title-grid').innerHTML=TITLES.map((title)=>{
+    const at=titleState.earned[title.id],tier=tierOf(title);
+    if(!(at>0))return `<article class="title-card locked"><span class="tc-q" aria-hidden="true">?</span><p class="tc-locked">${escapeHTML(ui('lockedLabel'))}</p><p class="tc-hint">${escapeHTML(ui('lockedHiddenName'))}</p></article>`;
+    const label=ui('tierLabels')?.[tier] ?? UI_DEFAULT.tierLabels[tier];
+    return `<article class="title-card owned" data-tier="${tier}"><span class="tc-tier">${escapeHTML(label)}</span><h3 class="tc-name">${escapeHTML(title.name)}</h3><p class="tc-flavor">${escapeHTML(title.flavor)}</p>${title.sub ? `<p class="tc-sub">${escapeHTML(title.sub)}</p>` : ''}<p class="tc-desc">${escapeHTML(title.desc)}</p><time class="tc-date" datetime="${new Date(at).toISOString()}">${escapeHTML(fill(ui('earnedOn'),{date:titleDate(at)}))}</time></article>`;
+  }).join('');
+}
+function showTitles() {
+  if(!collectionUnlocked || !stable() || phase==='titles')return;
+  cancelPending();dismissTitleToast(false);showQuip('');
+  $('#bundle-stage').hidden=true;$('#pack-list').hidden=true;$('#pack-position').hidden=true;$('#reveal-zone').hidden=true;$('#reveal-zone').replaceChildren();$('#collection-panel').hidden=true;$('#collection-grid').replaceChildren();
+  scene.classList.remove('charging','torn','releasing','unveiling','previewing','skipped','card-leaving');clearGrade();live=null;
+  setPhase('titles');setView('titles');resetEffects();renderTitles();
+  $('#title-panel').hidden=false;$('#title-panel').scrollTop=0;$('#message').textContent='';syncNavigation();
+  $('#title-heading').focus({preventScroll:true});refreshMagnetic();
+}
+
 function finishReveal(card,isNew) {
-  live=null;
+  live=null;const {won,quip}=pendingDraw;pendingDraw={won:[],quip:''};
   setPhase('revealed');setView('result');$('#pack-position').hidden=true;packButton.removeAttribute('aria-busy');
   syncNavigation();$('#announcement').textContent=`${card.name} ${gradeOf(card)} 카드가 나타났습니다.${isNew?' 처음 만난 카드입니다.':''}`;
   $('#card-list').focus({preventScroll:true});refreshMagnetic();
+  showQuip(quip);
+  if(won.length)openTitleToast(won);
 }
 function revealCard(card,image,instant=false) {
   setPhase('revealing');fillCardFront(card,image);scene.classList.add('unveiling');
@@ -233,6 +371,7 @@ function revealCard(card,image,instant=false) {
   counts[index]++;collectionUnlocked=true;
   try{localStorage.setItem(activePack.storageKey,JSON.stringify({version:1,counts}));}catch{/* Download remains available without storage. */}
   if(live){live.counted=true;live.isNew=isNew;}
+  pendingDraw=recordTitles(activePack,card,counts,index,isNew);
   if(isNew)$('#reveal-zone .card-magnetic')?.setAttribute('data-new','');
   burstLight(instant?.5:.9);playReveal();
   if(instant)finishReveal(card,isNew);
@@ -253,14 +392,20 @@ function prepareDraw() {
   return prepared;
 }
 function setTear(progress,dir=1) {
-  const style=packPosition.style,front=dir<0?96-progress*92:4+progress*92;
-  style.setProperty('--tear',progress.toFixed(3));style.setProperty('--tear-origin',dir<0?'right':'left');style.setProperty('--tear-pos',(dir<0?1-progress:progress).toFixed(3));
-  // the strip is split at the finger: --peel-clip is the torn part (behind it), --cap-clip what is still attached
-  style.setProperty('--front',front.toFixed(2));style.setProperty('--peel-sign',dir<0?'-1':'1');
-  style.setProperty('--peel-clip',dir<0?`inset(0 0 0 ${front.toFixed(2)}%)`:`inset(0 ${(100-front).toFixed(2)}% 0 0)`);
-  style.setProperty('--cap-clip',dir<0?`inset(0 ${(100-front).toFixed(2)}% 0 0)`:`inset(0 0 0 ${front.toFixed(2)}%)`);
+  const style=packPosition.style;
+  style.setProperty('--tear',progress.toFixed(3));style.setProperty('--tear-dir',dir<0?'-1':'1');style.setProperty('--tear-origin',dir<0?'right':'left');
 }
-function resetTear() { ['--tear','--tear-origin','--tear-pos','--front','--peel-sign','--peel-clip','--cap-clip'].forEach((name)=>packPosition.style.removeProperty(name));scene.classList.remove('dragging','dragged'); }
+function resetTear() { ['--tear','--tear-dir','--tear-origin'].forEach((name)=>packPosition.style.removeProperty(name));scene.classList.remove('dragging','dragged','auto-tearing'); }
+// Registering --tear as a number lets CSS animate it, which is how a plain click tears the strip open by itself.
+let tearAnimatable = false;
+try{CSS.registerProperty({name:'--tear',syntax:'<number>',inherits:true,initialValue:'0'});tearAnimatable=true;}catch{/* Unsupported or already registered: the sweep is skipped. */}
+// Click / Enter: after a short build-up the strip tears left to right on its own, like a drag, then the usual tear-off follows.
+function autoTear(done) {
+  if(!tearAnimatable || reducedMotion.matches){setTear(1,1);scene.classList.add('dragged');done();return;}
+  setTear(0,1);scene.classList.remove('charging');scene.classList.add('dragging','auto-tearing');
+  for(let i=0;i<7;i++)later(()=>playTearGrain(.25+i*.1),i*90);
+  later(()=>{scene.classList.remove('auto-tearing');setTear(1,1);scene.classList.add('dragged');done();},TEAR_SWEEP);
+}
 async function openPack({dragged=false}={}) {
   if(phase!=='sealed')return;
   cancelPending();const token=sequence,draw=prepareDraw();prepared=null;
@@ -280,8 +425,8 @@ async function openPack({dragged=false}={}) {
         later(()=>revealCard(card,image),reducedMotion.matches?30:T.reveal);
       },reducedMotion.matches?60:T.emerge);
     };
-    if(dragged){scene.classList.add('dragged');tear();}
-    else{setPhase('charging');scene.classList.add('charging');playCharge();refreshMagnetic();later(tear,reducedMotion.matches?20:T.charge);}
+    if(dragged){scene.classList.add('dragged');tear();try{localStorage.setItem('chiikawa-drag-tear-v1','1');}catch{/* The guide just keeps showing. */}document.documentElement.dataset.tearKnown='1';}
+    else{setPhase('charging');scene.classList.add('charging');playCharge();refreshMagnetic();later(()=>autoTear(tear),reducedMotion.matches?20:Math.max(350,T.charge-350));}
   }catch{
     if(token!==sequence)return;
     resetTear();setPhase('sealed');packButton.disabled=false;packButton.removeAttribute('aria-busy');syncNavigation();
@@ -337,34 +482,38 @@ function clearStage() {
   cancelPending();collectionReturn=null;selectedCard=null;prepared=null;drag=null;resetTear();
   $('#reveal-zone').hidden=true;$('#reveal-zone').replaceChildren();
   $('#collection-panel').hidden=true;$('#collection-grid').replaceChildren();
+  $('#title-panel').hidden=true;$('#title-grid').replaceChildren();dismissTitleToast(false);showQuip('');
   $('#pack-list').hidden=true;$('#pack-list').classList.remove('departing');$('#pack-grid').replaceChildren();
   $('#pack-position').hidden=true;$('#pack-position').classList.remove('pack-arriving');resetBoxes();
   $('#save-card').removeAttribute('href');$('#save-card').removeAttribute('download');
   $('#announcement').textContent='';$('#message').textContent='';
-  scene.classList.remove('charging','torn','releasing','unveiling','previewing','skipped');clearGrade();live=null;
+  scene.classList.remove('charging','torn','releasing','unveiling','previewing','skipped','card-leaving');clearGrade();live=null;
   $('#bundle-stage').hidden=true;
   document.querySelectorAll('.bundle-choice').forEach((button)=>button.disabled=false);
   packButton.disabled=false;packButton.removeAttribute('aria-busy');resetEffects();
 }
-function showBundles() {
-  if(!stable())return;
-  clearStage();setPhase('bundles');setView('bundles');renderBundles(activePack);$('#bundle-stage').hidden=false;
-  syncNavigation();
-  $('#bundle-stage .bundle-choice')?.focus({preventScroll:true});
-}
 function nextPack() {
   if(!stable())return;
-  clearStage();
-  setPackImage(activePack);
-  $('#pack-position').hidden=false;setPhase('sealed');setView('pack');
-  syncNavigation();refreshMagnetic();packButton.focus({preventScroll:true});
+  const enter=()=>{
+    clearStage();
+    setPackImage(activePack);
+    packPosition.hidden=false;packPosition.classList.add('pack-arriving');setPhase('sealed');setView('pack');
+    syncNavigation();refreshMagnetic();packButton.focus({preventScroll:true});
+    later(()=>packPosition.classList.remove('pack-arriving'),700);
+  };
+  // The shown card slides down and away first (a non-stable phase also blocks double taps), then the new pack appears from the centre.
+  const entrance=$('#reveal-zone .card-entrance');
+  if(entrance && typeof entrance.animate==='function' && !reducedMotion.matches){
+    setPhase('leaving');syncNavigation();scene.classList.add('card-leaving');later(enter,430);
+  }else enter();
 }
 
 function renderPackList() {
   $('#pack-list-note').textContent=`출시 ${PACK_SETS.length} · 준비 중 ${UPCOMING_PACKS.length}`;
   $('#pack-grid').innerHTML=PACK_SETS.map((pack)=>{
     const owned=getCounts(pack).filter((n)=>n>0).length;
-    return `<button class="pack-pick" data-pick-pack="${escapeHTML(pack.id)}" aria-label="${escapeHTML(pack.label)} 선택, 수집 ${owned} / ${pack.cards.length}"><span class="pack-pick-art"><img src="${escapeHTML(pack.boxImage)}" alt="" width="1254" height="1254" draggable="false"></span><span class="pack-pick-name">${escapeHTML(pack.label)}</span><span class="pack-pick-count">수집 ${owned} / ${pack.cards.length}</span><span class="pack-pick-cta">선택</span></button>`;
+    // The tile art is a mouse shortcut; the real controls are the two buttons under it (pick the pack / open its card list).
+    return `<div class="pack-tile"><button class="pack-pick" data-pick-pack="${escapeHTML(pack.id)}" tabindex="-1" aria-hidden="true"><span class="pack-pick-art"><img src="${escapeHTML(pack.boxImage)}" alt="" width="1254" height="1254" draggable="false"></span><span class="pack-pick-name">${escapeHTML(pack.label)}</span><span class="pack-pick-count">수집 ${owned} / ${pack.cards.length}</span></button><div class="pack-tile-actions"><button class="pack-pick-cta" data-pick-pack="${escapeHTML(pack.id)}" aria-label="${escapeHTML(pack.label)} 선택, 수집 ${owned} / ${pack.cards.length}">선택</button>${collectionUnlocked ? `<button class="pack-cards-link" data-pack-cards="${escapeHTML(pack.id)}" aria-label="${escapeHTML(pack.label)} 카드 목록">카드 목록 <span aria-hidden="true">▦</span></button>` : ''}</div></div>`;
   }).join('')+UPCOMING_PACKS.map((soon)=>`<div class="pack-soon" role="group" aria-disabled="true" aria-label="${escapeHTML(soon.label)}, 출시 예정"><span class="pack-soon-art" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg></span><span class="pack-soon-name">COMING SOON</span><span class="pack-soon-sub">${escapeHTML(soon.label)}</span></div>`).join('');
 }
 function showPacks() {
@@ -380,9 +529,8 @@ function renderCollection(pack) {
   const counts=getCounts(pack),owned=counts.filter((n)=>n>0).length,grades=packGrades(pack),chips=$('#grade-chips');
   $('#collection-count').textContent=`${owned} / ${pack.cards.length}`;
   $('#collection-summary').textContent=`${pack.label} · 총 ${counts.reduce((a,b)=>a+b,0).toLocaleString('ko-KR')}장 획득`;
-  // 팩이 하나뿐이면 팩 탭을 숨긴다(팩이 늘면 자동으로 다시 표시).
-  $('#pack-tabs').hidden=PACK_SETS.length<2;
-  $('#pack-tabs').innerHTML=PACK_SETS.length<2 ? '' : PACK_SETS.map((item)=>`<button class="pack-tab" data-collection-pack="${escapeHTML(item.id)}" aria-pressed="${item.id===pack.id}">${escapeHTML(item.label)}</button>`).join('');
+  // 팩 탭은 팩이 하나여도 항상 표시한다(지금 보는 팩 이름이 보이고, 팩이 늘면 그대로 전환 탭이 된다).
+  $('#pack-tabs').innerHTML=PACK_SETS.map((item)=>`<button class="pack-tab" data-collection-pack="${escapeHTML(item.id)}" aria-pressed="${item.id===pack.id}">${escapeHTML(item.label)}</button>`).join('');
   const byGrade=grades.map((grade)=>{
     const entries=pack.cards.map((card,index)=>[card,index]).filter(([card])=>gradeOf(card)===grade);
     return {grade,entries,have:entries.filter(([,index])=>counts[index]>0).length};
@@ -402,9 +550,10 @@ function renderCollection(pack) {
 function showCollection(packId=activePack.id) {
   if(!collectionUnlocked || !stable())return;
   const pack=PACK_SETS.find((item)=>item.id===packId);if(!pack)return;
-  cancelPending();collectionPackId=pack.id;activePack=pack;syncCounts(pack);
+  cancelPending();dismissTitleToast(false);showQuip('');collectionPackId=pack.id;activePack=pack;syncCounts(pack);
+  $('#title-panel').hidden=true;$('#title-grid').replaceChildren();
   $('#bundle-stage').hidden=true;$('#pack-list').hidden=true;$('#pack-position').hidden=true;$('#reveal-zone').hidden=true;$('#reveal-zone').replaceChildren();
-  scene.classList.remove('charging','torn','releasing','unveiling','previewing','skipped');clearGrade();live=null;
+  scene.classList.remove('charging','torn','releasing','unveiling','previewing','skipped','card-leaving');clearGrade();live=null;
   setPhase('collection');setView('collection');resetEffects();renderCollection(pack);
   $('#collection-panel').hidden=false;$('#collection-panel').scrollTop=collectionReturn?.packId===pack.id ? collectionReturn.top : 0;collectionReturn=null;$('#message').textContent='';syncNavigation();
   $('#collection-title').focus({preventScroll:true});refreshMagnetic();
@@ -430,9 +579,12 @@ async function inspectOwnedCard(packId,cardId) {
 $('#bundle-stage').addEventListener('click',(event)=>{const button=event.target.closest('[data-pack]');if(button)selectPack(button.dataset.pack);});
 packButton.addEventListener('click',()=>{if(suppressClick){suppressClick=false;return;}openPack();});
 $('#next-pack').addEventListener('click',nextPack);
-$('#choose-bundle').addEventListener('click',()=>view==='bundles' ? showPacks() : showBundles());
-$('#pack-list-open').addEventListener('click',showPacks);
-$('#pack-grid').addEventListener('click',(event)=>{const button=event.target.closest('[data-pick-pack]');if(button)selectPack(button.dataset.pickPack);});
+$('#choose-bundle').addEventListener('click',showPacks);
+$('#title-list').addEventListener('click',showTitles);
+$('#pack-grid').addEventListener('click',(event)=>{
+  const cards=event.target.closest('[data-pack-cards]');if(cards){showCollection(cards.dataset.packCards);return;}
+  const button=event.target.closest('[data-pick-pack]');if(button)selectPack(button.dataset.pickPack);
+});
 $('#card-list').addEventListener('click',()=>showCollection(collectionPackId));
 $('#save-card').addEventListener('click',()=>{$('#message').textContent='카드를 저장했어요.';later(()=>{$('#message').textContent='';},2400);});
 $('#pack-tabs').addEventListener('click',(event)=>{const button=event.target.closest('[data-collection-pack]');if(button)showCollection(button.dataset.collectionPack);});
@@ -441,6 +593,10 @@ $('#grade-chips').addEventListener('click',(event)=>{
   $('#grade-panel-'+button.dataset.jumpGrade)?.scrollIntoView?.({behavior:reducedMotion.matches?'auto':'smooth',block:'start'});
 });
 $('#collection-grid').addEventListener('click',(event)=>{const button=event.target.closest('[data-owned-card]');if(button)inspectOwnedCard(button.dataset.ownedPack,button.dataset.ownedCard);});
+document.querySelectorAll('.list-switch').forEach((group)=>group.addEventListener('click',(event)=>{
+  const button=event.target.closest('[data-list-switch]');if(!button || button.getAttribute('aria-pressed')==='true')return;
+  if(button.dataset.listSwitch==='titles')showTitles();else showCollection(collectionPackId);
+}));
 $('#skip-fx')?.addEventListener('click',skipOpening);
-document.addEventListener('keydown',(event)=>{if(event.key==='Escape')skipOpening();});
-renderPackList();syncNavigation();refreshMagnetic();
+document.addEventListener('keydown',(event)=>{if(event.key==='Escape'){if(toast.hidden)skipOpening();else dismissTitleToast();}});
+applyTitleUi();renderPackList();syncNavigation();refreshMagnetic();
