@@ -429,3 +429,8 @@
 /* Detail popup: dark enough that the list behind it never competes with the text */
 #title-detail[data-tier] .td-scrim{background:radial-gradient(ellipse at 50% 50%,rgb(0 0 0/.66),rgb(0 0 0/.5))}
 #title-detail[data-tier] .td-panel{background:linear-gradient(180deg,transparent,rgb(4 4 7/.9) 14%,rgb(4 4 7/.92) 86%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+
+/* Banner balance: the name sits at the band's centre, so the small line above it floats higher and the stack below it is tighter (it used to lean downward). */
+#title-toast[data-tier]{--foot:17px}
+#title-toast[data-tier] .tt-eyebrow{margin-bottom:calc(var(--fs)*.46)!important}
+#title-toast[data-tier] .tt-flavor{margin-top:16px}
