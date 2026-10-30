@@ -116,9 +116,6 @@
 .grade-panel[data-grade=B]{border-color:rgb(var(--gc-rgb)/.5)}
 .grade-panel[data-grade=B] .gp-head{background:linear-gradient(90deg,rgb(var(--gc-rgb)/.2),transparent 72%)}
 /* A and up: header gradient + diamond corner studs */
-.grade-panel:is([data-grade=A],[data-grade=S],[data-grade=SS],[data-grade=SSS]):before,.grade-panel:is([data-grade=A],[data-grade=S],[data-grade=SS],[data-grade=SSS]):after{content:'';position:absolute;z-index:2;width:11px;height:11px;pointer-events:none;background:rgb(var(--gc-rgb));clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
-.grade-panel:is([data-grade=A],[data-grade=S],[data-grade=SS],[data-grade=SSS]):before{left:-6px;top:-6px}
-.grade-panel:is([data-grade=A],[data-grade=S],[data-grade=SS],[data-grade=SSS]):after{right:-6px;bottom:-6px}
 .grade-panel[data-grade=A]{border-color:rgb(var(--gc-rgb)/.62)}
 .grade-panel[data-grade=A] .gp-head{background:linear-gradient(90deg,rgb(var(--gc-rgb)/.3),rgb(var(--gc-rgb)/.06) 78%)}
 /* S: violet frame, outer glow, a slow sheen across the header now and then */
