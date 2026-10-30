@@ -1,6 +1,6 @@
 // Add a pack here to create its bundle, wrapper, draw pool and collection tab.
 // 카드 grade = C/B/A/S/SS/SSS(생략 시 SSS). pack.rates({등급:가중치}) 가 있으면 등급 가중 추첨 후 그 등급 안에서 균등, 없으면 팩 전체 균등.
-// Give every pack its own stable storageKey; keep card order stable after release.
+// Give every pack its own stable storageKey (lowercase letters, digits, hyphens, <=64 chars: the save code only accepts that shape); keep card order stable after release.
 // 치이카와 팩 = 시크릿 6장(id 1-6, 인덱스 0-5) + 허접 주민 85장(id 7-91, 인덱스 6-90). 저장 키·카드 순서는 출시 후 바꾸지 말 것.
 export const PACK_SETS = [
   {
@@ -13,7 +13,7 @@ export const PACK_SETS = [
     wrapperImage: 'assets/chiikawa-pack.webp',
     boxFaces: {front: 'assets/chiikawa-box-front.webp', left: 'assets/chiikawa-box-left.webp', right: 'assets/chiikawa-box-right.webp', top: 'assets/chiikawa-box-top.webp'},
     storageKey: 'chiikawa-awakening-v1',
-    // 예전 허접 주민 팩(85칸) 저장 기록: 앱이 읽기만 하고(삭제 안 함) offset 칸부터 요소별 max 로 병합한다.
+    // 예전 허접 주민 팩(85칸) 저장 기록: 앱이 읽기만 하고(삭제 안 함; 단, 저장 코드 '덮어쓰기'를 확인한 경우에만 지운다) offset 칸부터 요소별 max 로 병합한다.
     legacyStorage: [{key: 'chiikawa-hj01-v1', offset: 6}],
     // 등급별 등장 확률(%) — 바꾸려면 여기만 (가중치라 합이 100일 필요는 없음)
     rates: {C:40,B:27,A:17,S:10,SS:4,SSS:2},

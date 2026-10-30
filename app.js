@@ -1,8 +1,9 @@
-import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=11';
-import { boxMarkup } from './box3d.js?v=11';
-import { refreshMagnetic, burstLight, resetEffects, stopFx, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain, playTitle } from './effects.js?v=11';
-import './grades.js?v=11';
-import { TITLES, TITLE_UI, QUIPS, titleMet, pickQuip, cleanTitleStats, nextTitleStats, emptyTitleStats } from './titles.js?v=11';
+import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=12';
+import { boxMarkup } from './box3d.js?v=12';
+import { refreshMagnetic, burstLight, resetEffects, stopFx, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain, playTitle } from './effects.js?v=12';
+import './grades.js?v=12';
+import { TITLES, TITLE_UI, QUIPS, titleMet, pickQuip, cleanTitleStats, nextTitleStats, emptyTitleStats } from './titles.js?v=12';
+import { encodeSave, decodeSave, mergeSnapshots, sanitizeSnapshot, summarize, diffSnapshots, foreignPacks } from './backup.js?v=12';
 
 const $ = (selector) => document.querySelector(selector);
 // Keyboard modality flag: the focus ring only shows while the keyboard is in use (see styles.css).
@@ -72,6 +73,8 @@ function syncNavigation() {
   $('#title-list').hidden = !collectionUnlocked || !['packs','bundles','pack'].includes(view);
   $('#card-list').setAttribute('aria-expanded',String(view==='collection'));
   $('#save-card').hidden = view!=='result' || !selectedCard || phase!=='revealed';
+  // Save-code link: top-right of the three list screens (pack list, card list, title list), also for a new visitor who wants to import.
+  $('#backup-open').hidden = !stable() || !['packs','collection','titles'].includes(view);
   // One top-left way out of every screen: back to the pack list.
   $('#choose-bundle').hidden = view==='packs' || !stable();
 }
@@ -357,6 +360,154 @@ function showTitles() {
   $('#title-heading').focus({preventScroll:true});refreshMagnetic();
 }
 
+// ---- 저장 코드: 기록(카드·칭호)을 한 줄 코드로 내보내고 불러온다. 기록은 이 브라우저(localStorage)에만 있어서, 사이트 데이터를 지우거나 기기를 바꿔도 이어 할 수 있게 한다.
+// 코드 만들기/읽기/합치기는 backup.js(순수 함수), 여기는 화면·저장 반영만. 전부 기기 안에서 처리하고 서버로 보내지 않는다. 입력은 textContent/value 로만 다루고, 불러온 값은 backup.js 가 전부 재검증한다.
+const backup=$('#backup-dialog'),bkPanel=backup.querySelector('.bk-panel'),bkStatus=$('#bk-status');
+const BK_MSG={empty:'코드를 붙여넣어 주세요.',format:'저장 코드 형식이 아니에요. CK 로 시작하는 코드를 통째로 붙여넣어 주세요.',checksum:'코드가 잘렸거나 글자가 바뀌었어요. 처음부터 끝까지 그대로 다시 복사해 주세요.',version:'지원하지 않는 버전의 코드예요. 이 사이트에서 내보낸 최신 코드인지 확인해 주세요.',tooLarge:'코드가 너무 길어요. 저장 코드가 맞는지 확인해 주세요.',unsupported:'이 브라우저는 압축된 코드를 읽지 못해요. 최신 브라우저로 열어 주세요.',data:'코드 안의 기록이 올바르지 않아요. 다시 내보낸 코드를 사용해 주세요.'};
+let bkReturn=null,bkToken=0,bkIncoming=null,bkMode='merge';
+function currentSnapshot() {
+  titleState=mergeTitleState(titleState,readTitleState());
+  return sanitizeSnapshot({v:1,t:Date.now(),packs:Object.fromEntries(PACK_SETS.map((pack)=>[pack.storageKey,syncCounts(pack)])),titles:{earned:titleState.earned,stats:titleState.stats}});
+}
+function bkSum(snap) { const sum=summarize(snap,TITLES.map((title)=>title.id));return `카드 ${sum.cards} / ${sum.slots} · 칭호 ${sum.titles} / ${TITLES.length} · 뽑기 ${sum.draws.toLocaleString('ko-KR')}회`; }
+// "합쳐지는 것" 한 줄(미리보기와 적용 결과가 같이 쓴다). 늘어나는 게 없으면 ''.
+function bkGain(diff) {
+  const more=diff.changedCards-diff.newCards-diff.lostCards,parts=[];
+  if(diff.newCards)parts.push(`카드 +${diff.newCards}종 새로 합쳐짐`);
+  if(more>0)parts.push(`보유 수가 늘어나는 카드 ${more}종`);
+  if(diff.newTitles)parts.push(`칭호 +${diff.newTitles}개`);
+  if(diff.drawsDelta>0)parts.push(`뽑기 +${diff.drawsDelta.toLocaleString('ko-KR')}회`);
+  return parts.join(' · ');
+}
+function setBkStatus(text,error=false) { bkStatus.textContent=text;if(error)bkStatus.classList.add('err');else bkStatus.classList.remove('err'); }
+const bkDisarm = () => { $('#bk-confirm').hidden=true;$('#bk-apply-row').hidden=false; };
+// Forget a checked code (the pasted text stays unless clear=true) and go back to the default mode.
+function resetImport(clear=false) {
+  bkIncoming=null;bkMode='merge';$('#bk-preview').hidden=true;bkDisarm();$('#bk-warn').hidden=true;$('#bk-p-foreign').hidden=true;
+  backup.querySelectorAll('[name=bk-mode]').forEach((radio)=>{radio.checked=radio.value==='merge';});
+  if(clear)$('#bk-input').value='';
+}
+async function buildExport() {
+  const token=++bkToken,snap=currentSnapshot(),sum=summarize(snap,TITLES.map((title)=>title.id)),empty=!sum.cards && !sum.titles && !sum.draws,area=$('#bk-code');
+  $('#bk-summary').textContent=bkSum(snap);$('#bk-summary').hidden=empty;$('#bk-empty').hidden=!empty;$('#bk-export-body').hidden=empty;
+  area.value='';$('#bk-copy').disabled=true;$('#bk-save').disabled=true;
+  if(empty)return;
+  let code='';
+  try{code=await encodeSave(snap);}catch{/* Reported below. */}
+  if(token!==bkToken || backup.hidden)return;
+  if(!code){setBkStatus('코드를 만들지 못했어요. 새로고침한 뒤 다시 열어 주세요.',true);return;}
+  area.value=code;$('#bk-copy').disabled=false;$('#bk-save').disabled=false;
+}
+function setBkTab(tab,focus=true) {
+  bkToken++;setBkStatus('');
+  backup.querySelectorAll('[data-bk-tab]').forEach((button)=>{const on=button.dataset.bkTab===tab;button.setAttribute('aria-selected',String(on));button.setAttribute('tabindex',on?'0':'-1');$('#bk-pane-'+button.dataset.bkTab).hidden=!on;});
+  if(tab==='export')buildExport();
+  if(focus)$('#bk-tab-'+tab).focus({preventScroll:true});
+}
+function openBackup() {
+  if(!backup.hidden || !stable() || !toast.hidden)return;
+  bkReturn=document.activeElement;resetImport(true);
+  backup.hidden=false;scene.setAttribute('inert','');scene.setAttribute('aria-hidden','true');bkPanel.scrollTop=0;
+  setBkTab('export');
+}
+function closeBackup() {
+  if(backup.hidden)return;
+  bkToken++;backup.hidden=true;scene.removeAttribute('inert');scene.removeAttribute('aria-hidden');resetImport(true);setBkStatus('');
+  const back=bkReturn;bkReturn=null;
+  (back && back!==document.body && back.isConnected!==false && !back.hidden ? back : $('#backup-open')).focus({preventScroll:true});
+}
+async function copyBackup() {
+  const area=$('#bk-code');if(!area.value)return;
+  try{await navigator.clipboard.writeText(area.value);setBkStatus('복사했어요.');return;}catch{/* Not allowed here: select the text and try the old way. */}
+  area.focus({preventScroll:true});area.select?.();
+  let done=false;
+  try{done=document.execCommand('copy')===true;}catch{/* Selected anyway. */}
+  if(done)setBkStatus('복사했어요.');else setBkStatus('복사하지 못했어요. 코드를 선택해 직접 복사해 주세요.',true);
+}
+function saveBackupFile() {
+  const code=$('#bk-code').value;if(!code)return;
+  try{
+    const when=new Date(),link=document.createElement('a'),url=URL.createObjectURL(new Blob([code+'\n'],{type:'text/plain'}));
+    link.href=url;link.download=`chiikawa-save-${when.getFullYear()}${pad2(when.getMonth()+1)}${pad2(when.getDate())}.txt`;
+    document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
+    setBkStatus('파일로 저장했어요.');
+  }catch{setBkStatus('파일로 저장하지 못했어요. 코드 복사를 이용해 주세요.',true);}
+}
+// 확인: 붙여넣은 코드를 읽어 미리보기를 보여 준다(아직 아무것도 바뀌지 않는다).
+async function checkBackup() {
+  resetImport();setBkStatus('');
+  const token=++bkToken,result=await decodeSave($('#bk-input').value);
+  if(token!==bkToken || backup.hidden)return;
+  if(!result.ok){setBkStatus(BK_MSG[result.error] || BK_MSG.format,true);return;}
+  bkIncoming=result.snapshot;
+  const now=currentSnapshot(),foreign=foreignPacks(now,bkIncoming).length,at=bkIncoming.t;
+  $('#bk-p-saved').textContent=at ? `${titleDate(at)} ${pad2(new Date(at).getHours())}:${pad2(new Date(at).getMinutes())}` : '알 수 없음';
+  $('#bk-p-incoming').textContent=bkSum(mergeSnapshots(now,bkIncoming,'replace'));$('#bk-p-current').textContent=bkSum(now);
+  $('#bk-p-foreign').textContent=`이 버전에서 아직 쓰지 않는 카드팩 기록 ${foreign}개는 건너뛰어요.`;$('#bk-p-foreign').hidden=!foreign;
+  $('#bk-preview').hidden=false;updateBkChange();
+  setBkStatus('코드를 확인했어요. 적용 방법을 고르고 ‘적용’을 눌러 주세요.');
+}
+function updateBkChange() {
+  const now=currentSnapshot(),next=mergeSnapshots(now,bkIncoming,bkMode);
+  $('#bk-p-change').textContent=bkMode==='replace' ? `${bkSum(next)} 로 바뀌어요` : (bkGain(diffSnapshots(now,next)) || '달라지는 기록이 없어요. 이미 모두 이 브라우저에 있어요');
+  $('#bk-warn').hidden=bkMode!=='replace';bkDisarm();
+}
+// 적용: 메모리 상태 + localStorage + 화면을 한 번에 맞춘다(저장이 막혀 있어도 이번 방문 동안은 반영).
+function applyBackup(mode) {
+  if(!bkIncoming)return;
+  const now=currentSnapshot(),next=mergeSnapshots(now,bkIncoming,mode),diff=diffSnapshots(now,next);
+  let kept=true;
+  for(const pack of PACK_SETS){
+    const counts=next.packs[pack.storageKey] || getCounts(pack);countsByPack.set(pack.id,counts);
+    let wrote=false;
+    try{localStorage.setItem(pack.storageKey,JSON.stringify({version:1,counts}));wrote=true;}catch{kept=false;}
+    // Overwrite means overwrite: the old per-pack records (read back as a floor on every load) would otherwise bring the replaced cards back.
+    if(wrote && mode==='replace')for(const legacy of pack.legacyStorage||[])try{localStorage.removeItem(legacy.key);}catch{/* Left as it was. */}
+  }
+  titleState={earned:next.titles.earned,stats:cleanTitleStats(next.titles.stats)};
+  try{localStorage.setItem(TITLE_KEY,JSON.stringify({version:1,earned:titleState.earned,stats:titleState.stats}));}catch{kept=false;}
+  collectionUnlocked=[...countsByPack.values()].some((counts)=>counts.some((count)=>count>0));
+  if(view==='packs')renderPackList();else if(view==='collection')renderCollection(activePack);else if(view==='titles')renderTitles();
+  syncNavigation();
+  const message=(mode==='replace' ? `덮어썼어요. 이제 ${bkSum(next)} 예요.` : (bkGain(diff) ? `합쳤어요. ${bkGain(diff)}` : '합쳤어요. 새로 더해진 기록은 없었어요.'))+(kept ? '' : ' 다만 이 브라우저가 저장을 막고 있어서, 이번 방문 동안만 유지돼요.');
+  resetImport(true);setBkStatus(message,!kept);$('#announcement').textContent=message;
+  $('#bk-tab-import').focus({preventScroll:true});
+}
+async function readBackupFile(file) {
+  if(!file)return;
+  if(file.size>40000){setBkStatus('파일이 너무 커요. 저장 코드 파일(.txt)이 맞는지 확인해 주세요.',true);return;}
+  try{$('#bk-input').value=await file.text();}catch{setBkStatus('파일을 읽지 못했어요.',true);return;}
+  checkBackup();
+}
+$('#backup-open').addEventListener('click',openBackup);
+$('#bk-close').addEventListener('click',closeBackup);
+$('#bk-copy').addEventListener('click',copyBackup);
+$('#bk-save').addEventListener('click',saveBackupFile);
+$('#bk-check').addEventListener('click',checkBackup);
+$('#bk-pick').addEventListener('click',()=>$('#bk-file').click());
+$('#bk-file').addEventListener('change',(event)=>{const input=event.target,file=input.files?.[0];try{input.value='';}catch{/* Picking the same file again may need a reload. */}readBackupFile(file);});
+$('#bk-input').addEventListener('input',()=>{if(bkIncoming){resetImport();setBkStatus('');}});
+$('#bk-code').addEventListener('focus',(event)=>event.target.select?.());
+$('#bk-code').addEventListener('click',(event)=>event.target.select?.());
+$('#bk-modes').addEventListener('change',(event)=>{if(event.target.name!=='bk-mode' || !bkIncoming)return;bkMode=event.target.value==='replace' ? 'replace' : 'merge';updateBkChange();});
+$('#bk-apply').addEventListener('click',()=>{
+  if(!bkIncoming)return;
+  if(bkMode==='replace'){$('#bk-apply-row').hidden=true;$('#bk-confirm').hidden=false;$('#bk-yes').focus({preventScroll:true});}else applyBackup('merge');
+});
+$('#bk-yes').addEventListener('click',()=>applyBackup('replace'));
+$('#bk-no').addEventListener('click',()=>{bkDisarm();$('#bk-apply').focus({preventScroll:true});});
+backup.addEventListener('click',(event)=>{const tab=event.target.closest('[data-bk-tab]');if(tab && tab.getAttribute('aria-selected')!=='true')setBkTab(tab.dataset.bkTab);});
+backup.addEventListener('keydown',(event)=>{
+  if(event.key==='Tab'){
+    const items=[...bkPanel.querySelectorAll('button,textarea,input,[tabindex="0"]')].filter((item)=>!item.disabled && item.getAttribute('tabindex')!=='-1' && !item.closest('[hidden]'));
+    if(!items.length)return;
+    const first=items[0],last=items[items.length-1],here=document.activeElement,inside=bkPanel.contains(here);
+    if(event.shiftKey ? (here===first || !inside) : (here===last || !inside)){event.preventDefault();(event.shiftKey ? last : first).focus({preventScroll:true});}
+  }else if((event.key==='ArrowLeft' || event.key==='ArrowRight') && event.target.closest?.('[data-bk-tab]')){
+    event.preventDefault();setBkTab(event.target.dataset.bkTab==='export' ? 'import' : 'export');
+  }
+});
+
 function finishReveal(card,isNew) {
   live=null;const {won,quip}=pendingDraw;pendingDraw={won:[],quip:''};
   setPhase('revealed');setView('result');$('#pack-position').hidden=true;packButton.removeAttribute('aria-busy');
@@ -598,5 +749,5 @@ document.querySelectorAll('.list-switch').forEach((group)=>group.addEventListene
   if(button.dataset.listSwitch==='titles')showTitles();else showCollection(collectionPackId);
 }));
 $('#skip-fx')?.addEventListener('click',skipOpening);
-document.addEventListener('keydown',(event)=>{if(event.key==='Escape'){if(toast.hidden)skipOpening();else dismissTitleToast();}});
+document.addEventListener('keydown',(event)=>{if(event.key==='Escape'){if(!backup.hidden)closeBackup();else if(toast.hidden)skipOpening();else dismissTitleToast();}});
 applyTitleUi();renderPackList();syncNavigation();refreshMagnetic();

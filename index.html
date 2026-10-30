@@ -8,12 +8,13 @@
   <title>CHIIKAWA — CARD PACK</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23000'/%3E%3Cpath d='M32 8 38 26 56 32 38 38 32 56 26 38 8 32 26 26Z' fill='%23e7ca82'/%3E%3C/svg%3E">
   <link rel="preload" href="assets/chiikawa-box-front.webp" as="image">
-  <link rel="stylesheet" href="styles.css?v=11">
-  <link rel="stylesheet" href="box3d.css?v=11">
-  <link rel="stylesheet" href="card-shine.css?v=11">
-  <link rel="stylesheet" href="grade-fx.css?v=11">
-  <link rel="stylesheet" href="titles.css?v=11">
-  <script src="app.js?v=11" type="module"></script>
+  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="box3d.css?v=12">
+  <link rel="stylesheet" href="card-shine.css?v=12">
+  <link rel="stylesheet" href="grade-fx.css?v=12">
+  <link rel="stylesheet" href="titles.css?v=12">
+  <link rel="stylesheet" href="backup.css?v=12">
+  <script src="app.js?v=12" type="module"></script>
 </head>
 <body>
   <main id="scene" data-phase="packs" data-view="packs" aria-label="우주 속 카드 꾸러미와 카드팩">
@@ -23,6 +24,7 @@
     <div class="light-bloom" aria-hidden="true"></div>
     <div class="shockwave" aria-hidden="true"></div>
     <button id="choose-bundle" class="quiet-button bundle-back" hidden><span aria-hidden="true">←</span> 카드팩 목록</button>
+    <button id="backup-open" class="quiet-button backup-open" aria-haspopup="dialog" hidden><span aria-hidden="true">⇅</span> 저장 코드</button>
     <section id="bundle-stage" aria-label="카드 꾸러미" hidden></section>
     <div class="pack-position" id="pack-position" hidden>
       <div class="pack-float">
@@ -87,6 +89,43 @@
       <p class="tt-line" id="tt-line"></p>
       <p class="tt-more" id="tt-more" hidden></p>
       <div class="tt-actions"><button type="button" id="title-ok" class="tt-ok"></button><button type="button" id="title-open" class="tt-open"></button></div>
+    </div>
+  </div>
+  <div id="backup-dialog" class="backup-dialog" hidden>
+    <div class="bk-panel" role="dialog" aria-modal="true" aria-labelledby="bk-title" aria-describedby="bk-intro" tabindex="-1">
+      <header class="bk-head"><h2 id="bk-title">저장 코드</h2><button type="button" id="bk-close" class="bk-close" aria-label="닫기">×</button></header>
+      <p id="bk-intro" class="bk-intro">이 사이트는 기록을 이 브라우저에만 저장해요. 사이트 데이터를 지우면 사라지니, 코드를 복사해 두세요. 다른 기기에서 붙여넣으면 이어서 할 수 있어요.</p>
+      <div class="bk-tabs" role="tablist" aria-label="저장 코드 기능">
+        <button type="button" role="tab" id="bk-tab-export" data-bk-tab="export" aria-controls="bk-pane-export" aria-selected="true">내보내기</button>
+        <button type="button" role="tab" id="bk-tab-import" data-bk-tab="import" aria-controls="bk-pane-import" aria-selected="false" tabindex="-1">불러오기</button>
+      </div>
+      <section id="bk-pane-export" role="tabpanel" aria-labelledby="bk-tab-export">
+        <p id="bk-summary" class="bk-summary"></p>
+        <p id="bk-empty" class="bk-note" hidden>아직 저장할 기록이 없어요. 카드를 뽑은 뒤에 다시 열어 주세요. 다른 기기의 기록을 가져오려면 ‘불러오기’ 탭을 쓰세요.</p>
+        <div id="bk-export-body">
+          <label class="bk-label" for="bk-code">내 저장 코드</label>
+          <textarea id="bk-code" class="bk-area" readonly rows="5" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+          <div class="bk-actions"><button type="button" id="bk-copy" class="bk-primary" disabled>코드 복사</button><button type="button" id="bk-save" class="bk-secondary" disabled>파일로 저장</button></div>
+        </div>
+      </section>
+      <section id="bk-pane-import" role="tabpanel" aria-labelledby="bk-tab-import" hidden>
+        <label class="bk-label" for="bk-input">저장 코드 붙여넣기</label>
+        <textarea id="bk-input" class="bk-area" rows="5" maxlength="40000" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="CK1-..."></textarea>
+        <div class="bk-actions"><button type="button" id="bk-check" class="bk-primary">확인</button><button type="button" id="bk-pick" class="bk-secondary">파일 선택</button><input type="file" id="bk-file" accept=".txt,text/plain" hidden></div>
+        <div id="bk-preview" hidden>
+          <dl class="bk-dl"><dt>저장한 때</dt><dd id="bk-p-saved"></dd><dt>코드의 기록</dt><dd id="bk-p-incoming"></dd><dt>지금 기록</dt><dd id="bk-p-current"></dd><dt>적용하면</dt><dd id="bk-p-change"></dd></dl>
+          <p id="bk-p-foreign" class="bk-note" hidden></p>
+          <fieldset id="bk-modes" class="bk-modes"><legend>적용 방법</legend>
+            <label class="bk-mode"><input type="radio" name="bk-mode" value="merge" checked><span><b>합치기 (권장)</b><small>지금 기록은 그대로 두고, 코드에만 있는 카드와 칭호를 더해요.</small></span></label>
+            <label class="bk-mode"><input type="radio" name="bk-mode" value="replace"><span><b>덮어쓰기</b><small>지금 기록을 지우고 코드의 기록으로 바꿔요.</small></span></label>
+          </fieldset>
+          <p id="bk-warn" class="bk-warn" hidden>덮어쓰면 이 브라우저의 지금 기록이 코드의 기록으로 바뀌고, 코드에 없는 카드와 칭호는 사라져요.</p>
+          <div id="bk-apply-row" class="bk-actions"><button type="button" id="bk-apply" class="bk-primary">적용</button></div>
+          <div id="bk-confirm" role="group" aria-label="덮어쓰기 확인" hidden><p class="bk-warn">정말 덮어쓸까요? 지금 기록이 사라지고 되돌릴 수 없어요.</p><div class="bk-actions"><button type="button" id="bk-yes" class="bk-danger">네, 덮어쓰기</button><button type="button" id="bk-no" class="bk-secondary">취소</button></div></div>
+        </div>
+      </section>
+      <p id="bk-status" class="bk-status" role="status" aria-live="polite"></p>
+      <p class="bk-privacy">코드는 이 기기 안에서만 만들고 읽어요. 서버로 보내지 않아요.</p>
     </div>
   </div>
   <noscript>팩을 뜯으려면 브라우저에서 JavaScript를 켜주세요.</noscript>

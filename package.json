@@ -3,5 +3,5 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": { "check": "node --check app.js && node --check effects.js && node --check grades.js && node --check packs.js && node --check titles.js", "start": "python -m http.server 4173 --bind 127.0.0.1" }
+  "scripts": { "check": "node --check app.js && node --check effects.js && node --check grades.js && node --check packs.js && node --check titles.js && node --check backup.js", "start": "python -m http.server 4173 --bind 127.0.0.1" }
 }
