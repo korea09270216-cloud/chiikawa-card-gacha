@@ -9,7 +9,6 @@ const $ = (selector) => document.querySelector(selector);
 // Keyboard modality flag: the focus ring only shows while the keyboard is in use (see styles.css).
 document.addEventListener('keydown',()=>{document.documentElement.dataset.kbd='1';},true);
 document.addEventListener('pointerdown',()=>{delete document.documentElement.dataset.kbd;},true);
-try{if(localStorage.getItem('chiikawa-drag-tear-v1'))document.documentElement.dataset.tearKnown='1';}catch{/* Storage is optional. */}
 const scene = $('#scene');
 const packButton = $('#pack-button');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -640,7 +639,7 @@ async function openPack({dragged=false}={}) {
         later(()=>revealCard(card,image),reducedMotion.matches?30:T.reveal);
       },reducedMotion.matches?60:T.emerge);
     };
-    if(dragged){scene.classList.add('dragged');tear();try{localStorage.setItem('chiikawa-drag-tear-v1','1');}catch{/* The guide just keeps showing. */}document.documentElement.dataset.tearKnown='1';}
+    if(dragged){scene.classList.add('dragged');tear();}
     else{setPhase('charging');scene.classList.add('charging');playCharge();refreshMagnetic();later(()=>autoTear(tear),reducedMotion.matches?20:Math.max(350,T.charge-350));}
   }catch{
     if(token!==sequence)return;
