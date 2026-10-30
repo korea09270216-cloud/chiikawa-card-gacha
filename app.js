@@ -797,6 +797,8 @@ packButton.addEventListener('click',()=>{if(suppressClick){suppressClick=false;r
 $('#next-pack').addEventListener('click',nextPack);
 $('#choose-bundle').addEventListener('click',showPacks);
 $('#title-list').addEventListener('click',showTitles);
+// Dragging must never start a native drag ghost or select text (the save-code boxes excepted).
+for(const type of ['dragstart','selectstart'])document.addEventListener(type,(event)=>{const el=event.target.nodeType===1?event.target:event.target.parentElement;if(!el?.closest('textarea,input'))event.preventDefault();});
 $('#pack-grid').addEventListener('click',(event)=>{
   const cards=event.target.closest('[data-pack-cards]');if(cards){showCollection(cards.dataset.packCards);return;}
   const button=event.target.closest('[data-pick-pack]');if(button)selectPack(button.dataset.pickPack);

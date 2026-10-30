@@ -217,3 +217,8 @@ html[data-tear-known] .tg-line,html[data-tear-known] .tg-hand{animation-delay:9s
 @keyframes tg-line{0%,6%{opacity:0}16%,50%{opacity:.85}62%,100%{opacity:0}}
 @keyframes tg-swipe{0%{left:2%;opacity:0;transform:scale(1.15)}10%{left:2%;opacity:1;transform:scale(.85)}18%{left:2%;opacity:1;transform:scale(.85)}52%{left:98%;opacity:1;transform:scale(.85)}60%{left:98%;opacity:0;transform:scale(1.1)}100%{left:98%;opacity:0}}
 
+
+/* No text selection or native image/element drag ghosts while pressing and dragging (pack tear, card tilt); the save-code boxes stay selectable. */
+html,body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+img,svg,a,button{-webkit-user-drag:none;user-drag:none}
+textarea,input[type=text],input[type=search]{-webkit-user-select:text;user-select:text}
