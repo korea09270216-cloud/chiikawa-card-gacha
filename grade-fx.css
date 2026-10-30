@@ -174,3 +174,30 @@
 #scene:is([data-grade=S],[data-grade=SS],[data-grade=SSS]):is([data-phase=revealing],[data-phase=revealed]) .card-magnetic[data-new]:after{animation:new-tag-in .5s cubic-bezier(.2,1.4,.3,1) .9s both,new-tag-shine 2.6s ease-in-out 1.7s infinite}
 @keyframes new-tag-shine{0%,45%{background-position:160% 0,0 0}80%,100%{background-position:-60% 0,0 0}}
 @media(prefers-reduced-motion:reduce){#scene:is([data-grade=S],[data-grade=SS],[data-grade=SSS]):is([data-phase=revealing],[data-phase=revealed]) .card-magnetic[data-new]:after{animation:none;opacity:1}}
+
+/* NEW: a big badge floating above the card with sun rays slowly turning behind it; colour and richness follow the grade (rays use the grade's own colours, SSS cycles the whole rainbow). */
+.card-magnetic[data-new]:after{content:none!important;animation:none!important}
+.new-badge{--nb-w:.56;--ray-a:.42;--spin:24s;position:absolute;left:50%;bottom:calc(100% - var(--card-width)*.075);width:calc(var(--card-width)*var(--nb-w));height:calc(var(--card-width)*var(--nb-w)*.5);translate:-50% 0;z-index:-1;pointer-events:none;display:flex;align-items:center;justify-content:center;opacity:0;animation:nb-pop .75s cubic-bezier(.2,1.5,.3,1) .95s both}
+.nb-rays{position:absolute;left:50%;top:50%;width:calc(var(--card-width)*1.55);aspect-ratio:1;translate:-50% -50%;border-radius:50%;pointer-events:none;opacity:var(--ray-a);
+  background:repeating-conic-gradient(from 0deg,rgb(var(--g-rgb,250 204 110)/.9) 0 4.5deg,transparent 4.5deg 15deg);
+  -webkit-mask-image:radial-gradient(closest-side,#000 6%,rgb(0 0 0/.55) 38%,transparent 74%);mask-image:radial-gradient(closest-side,#000 6%,rgb(0 0 0/.55) 38%,transparent 74%);
+  animation:nb-spin var(--spin) linear infinite}
+.nb-rays2{display:none;background:repeating-conic-gradient(from 7deg,rgb(var(--g-rgb2,255 243 207)/.85) 0 3deg,transparent 3deg 12deg);opacity:calc(var(--ray-a)*.75);animation-direction:reverse;animation-duration:calc(var(--spin)*.8)}
+.nb-text{position:relative;flex:none;white-space:nowrap;font:900 calc(var(--card-width)*var(--nb-w)*.34)/1 var(--title-font,Arial Black,Arial,sans-serif);letter-spacing:.04em;padding-left:.04em;color:transparent;-webkit-text-fill-color:transparent;background:linear-gradient(180deg,rgb(var(--g-rgb2,255 243 207)) 0,rgb(var(--g-rgb,250 204 110)) 52%,rgb(var(--g-rgb3,200 140 40)) 100%);-webkit-background-clip:text;background-clip:text;
+  filter:drop-shadow(0 0 1px #000) drop-shadow(0 .05em 0 rgb(0 0 0/.8)) drop-shadow(0 0 .28em rgb(var(--g-rgb,250 204 110)/.85))}
+#scene[data-grade=C] .new-badge{--nb-w:.5;--ray-a:.34;--spin:28s}
+#scene[data-grade=B] .new-badge{--nb-w:.54;--ray-a:.42;--spin:22s}
+#scene[data-grade=A] .new-badge{--nb-w:.58;--ray-a:.5;--spin:18s}
+#scene[data-grade=A] .nb-rays2,#scene[data-grade=S] .nb-rays2,#scene[data-grade=SS] .nb-rays2,#scene[data-grade=SSS] .nb-rays2{display:block}
+#scene[data-grade=S] .new-badge{--nb-w:.62;--ray-a:.58;--spin:15s}
+#scene[data-grade=SS] .new-badge{--nb-w:.66;--ray-a:.66;--spin:12s}
+#scene[data-grade=SSS] .new-badge{--nb-w:.7;--ray-a:.74;--spin:10s}
+#scene:is([data-grade=S],[data-grade=SS],[data-grade=SSS]) .nb-text{animation:nb-glow 2.2s ease-in-out 1.7s infinite alternate}
+#scene[data-grade=SS] .nb-rays,#scene[data-grade=SSS] .nb-rays{background:repeating-conic-gradient(from 0deg,rgb(var(--g-rgb)/.95) 0 3.5deg,transparent 3.5deg 10deg)}
+#scene[data-grade=SSS] .nb-rays2{background:conic-gradient(from 0deg,rgb(255 115 115/.62) 0deg 8deg,transparent 8deg 20deg,rgb(255 162 115/.62) 20deg 28deg,transparent 28deg 40deg,rgb(255 208 115/.62) 40deg 48deg,transparent 48deg 60deg,rgb(255 255 115/.62) 60deg 68deg,transparent 68deg 80deg,rgb(208 255 115/.62) 80deg 88deg,transparent 88deg 100deg,rgb(162 255 115/.62) 100deg 108deg,transparent 108deg 120deg,rgb(115 255 115/.62) 120deg 128deg,transparent 128deg 140deg,rgb(115 255 162/.62) 140deg 148deg,transparent 148deg 160deg,rgb(115 255 208/.62) 160deg 168deg,transparent 168deg 180deg,rgb(115 255 255/.62) 180deg 188deg,transparent 188deg 200deg,rgb(115 208 255/.62) 200deg 208deg,transparent 208deg 220deg,rgb(115 161 255/.62) 220deg 228deg,transparent 228deg 240deg,rgb(115 115 255/.62) 240deg 248deg,transparent 248deg 260deg,rgb(161 115 255/.62) 260deg 268deg,transparent 268deg 280deg,rgb(208 115 255/.62) 280deg 288deg,transparent 288deg 300deg,rgb(255 115 255/.62) 300deg 308deg,transparent 308deg 320deg,rgb(255 115 208/.62) 320deg 328deg,transparent 328deg 340deg,rgb(255 115 162/.62) 340deg 348deg,transparent 348deg 360deg);-webkit-mask-image:radial-gradient(closest-side,#000 6%,rgb(0 0 0/.5) 40%,transparent 76%);mask-image:radial-gradient(closest-side,#000 6%,rgb(0 0 0/.5) 40%,transparent 76%)}
+#scene[data-grade=SSS] .nb-text{background:linear-gradient(105deg,#fff6d0 0,#ffd36b 28%,#fff 44%,#ffd36b 56%,#f6a931 100%) 0 0/220% 100%;-webkit-background-clip:text;background-clip:text;animation:nb-glow 2.2s ease-in-out 1.7s infinite alternate,nb-shine 3.2s linear 1.7s infinite}
+@keyframes nb-spin{to{rotate:360deg}}
+@keyframes nb-pop{0%{opacity:0;transform:scale(.3) rotate(-8deg)}100%{opacity:1;transform:none}}
+@keyframes nb-glow{from{filter:drop-shadow(0 0 1px #000) drop-shadow(0 .05em 0 rgb(0 0 0/.8)) drop-shadow(0 0 .18em rgb(var(--g-rgb)/.7))}to{filter:drop-shadow(0 0 1px #000) drop-shadow(0 .05em 0 rgb(0 0 0/.8)) drop-shadow(0 0 .42em rgb(var(--g-rgb2)/1))}}
+@keyframes nb-shine{from{background-position:120% 0}to{background-position:-100% 0}}
+@media(prefers-reduced-motion:reduce){.new-badge{animation:none;opacity:1}.nb-rays,.nb-text{animation:none!important}}

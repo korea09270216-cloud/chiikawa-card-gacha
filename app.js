@@ -1,9 +1,9 @@
-import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=32';
-import { boxMarkup } from './box3d.js?v=32';
-import { refreshMagnetic, burstLight, resetEffects, stopFx, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain, playTitle } from './effects.js?v=32';
-import './grades.js?v=32';
-import { TITLES, TITLE_UI, QUIPS, titleMet, pickQuip, cleanTitleStats, nextTitleStats, emptyTitleStats } from './titles.js?v=32';
-import { encodeSave, decodeSave, mergeSnapshots, sanitizeSnapshot, summarize, diffSnapshots, foreignPacks } from './backup.js?v=32';
+import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=40';
+import { boxMarkup } from './box3d.js?v=40';
+import { refreshMagnetic, burstLight, resetEffects, stopFx, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain, playTitle } from './effects.js?v=40';
+import './grades.js?v=40';
+import { TITLES, TITLE_UI, QUIPS, titleMet, pickQuip, cleanTitleStats, nextTitleStats, emptyTitleStats } from './titles.js?v=40';
+import { encodeSave, decodeSave, mergeSnapshots, sanitizeSnapshot, summarize, diffSnapshots, foreignPacks } from './backup.js?v=40';
 
 const $ = (selector) => document.querySelector(selector);
 // Keyboard modality flag: the focus ring only shows while the keyboard is in use (see styles.css).
@@ -262,29 +262,27 @@ function mergeTitleState(a,b) {
 let titleState=readTitleState(),pendingDraw={won:[],quip:'',ticket:null};
 // ---- 확정 뽑기권: 일반 뽑기 10번마다 1장, 쓰면 S 이상이 확정된다. 따로 저장하지 않고 통계(draws·ticketDraws)에서 계산하므로 저장 코드에도 그대로 실린다. ----
 // 뽑기권으로 뽑은 횟수(ticketDraws)는 10번 세기에서 빼고, 보유 수 = 일반 뽑기 10번 묶음 수 - 쓴 수.
-const TICKET_EVERY=10,TICKET_GRADES=['S','SS','SSS'];let useTicket=true;
+const TICKET_EVERY=10,TICKET_GRADES=['S','SS','SSS']; // a ticket is applied automatically to the next draw while you hold one
 function ticketInfo(stats=titleState.stats) {
   const used=stats.ticketDraws||0,normal=Math.max(0,stats.draws-used),earned=Math.floor(normal/TICKET_EVERY);
   return {earned,balance:Math.max(0,earned-used),progress:normal%TICKET_EVERY};
 }
-const ticketReady = () => useTicket && ticketInfo().balance>0 && activePack.cards.some((card)=>TICKET_GRADES.includes(gradeOf(card)));
+const ticketReady = () => ticketInfo().balance>0 && activePack.cards.some((card)=>TICKET_GRADES.includes(gradeOf(card)));
 function renderTicketBar() {
   const show=phase==='sealed' && view==='pack',bar=$('#ticket-bar');
   bar.hidden=!show;scene.dataset.ticket='';
   if(!show)return;
-  const {balance,progress}=ticketInfo(),button=$('#ticket-toggle'),on=useTicket && balance>0;
-  button.disabled=balance===0;button.setAttribute('aria-pressed',String(on));
-  button.innerHTML=balance>0 ? `<span aria-hidden="true">◆</span> S 이상 확정 뽑기권 <b>${balance}장</b> · ${on?'사용 중':'꺼짐'}` : `S 이상 확정 뽑기권까지 <b>${progress} / ${TICKET_EVERY}</b>`;
+  const {balance,progress}=ticketInfo(),button=$('#ticket-toggle'),on=balance>0;
+  button.innerHTML=on ? `<span aria-hidden="true">◆</span> S이상 뽑기권 적용됨${balance>1 ? ` <b>· ${balance}장</b>` : ''}` : `S이상 뽑기권까지 <b>${progress} / ${TICKET_EVERY}</b>`;
   if(on)scene.dataset.ticket='on';
 }
 function showTicketNote(info) {
   const note=$('#ticket-note');note.classList.remove('show');note.textContent='';
   if(!info)return;
-  note.textContent=info.gained ? `◆ S 이상 확정 뽑기권 +${info.gained} · 보유 ${info.balance}장` : info.used ? `◆ 확정 뽑기권 사용 · 남은 ${info.balance}장` : `확정 뽑기권까지 ${info.progress} / ${TICKET_EVERY}`;
+  note.textContent=info.gained ? `◆ S이상 뽑기권을 받았습니다${info.balance>1 ? ` (보유 ${info.balance}장)` : ''}` : info.used ? `◆ S이상 뽑기권 적용됨${info.balance>0 ? ` · 남은 ${info.balance}장` : ''}` : `S이상 뽑기권까지 ${info.progress} / ${TICKET_EVERY}`;
   note.dataset.kind=info.gained ? 'gain' : info.used ? 'used' : 'progress';
   void note.offsetWidth;note.classList.add('show');
 }
-$('#ticket-toggle').addEventListener('click',()=>{useTicket=!useTicket;prepared=null;renderTicketBar();});
 
 const recentQuips=[]; // the last few lines shown (this session only), so the same line never comes twice in a row
 // Called once per counted draw (revealCard): updates the stats, awards newly met titles, saves, and picks this draw's one-liner. Returns {won: new titles, quip}.
@@ -376,7 +374,8 @@ toast.addEventListener('click',(event)=>{
   if(performance.now()-toastShownAt<TOAST_GUARD)return; // a stray tap while the banner is still arriving must not skip it unseen
   if(event.target.closest('#title-open')){dismissTitleToast();showTitles();}else leaveTitleToast();
 });
-toastCard.addEventListener('pointerenter',()=>holdToast('pointer'));toastCard.addEventListener('pointerleave',()=>releaseToast('pointer'));
+toastCard.addEventListener('pointerenter',()=>{if(performance.now()-toastShownAt<1500)return;holdToast('pointer');}); // a pointer that was already resting where the banner appears (the click that opened the pack) must not pin it
+toastCard.addEventListener('pointerleave',()=>releaseToast('pointer'));
 toastCard.addEventListener('animationend',(event)=>{if(event.animationName==='tt-out' && toast.classList.contains('is-out'))finishTitleToast();});
 toast.addEventListener('focusin',()=>holdToast('focus'));toast.addEventListener('focusout',()=>releaseToast('focus'));
 
@@ -617,7 +616,7 @@ function revealCard(card,image,instant=false) {
   try{localStorage.setItem(activePack.storageKey,JSON.stringify({version:1,counts}));}catch{/* Download remains available without storage. */}
   if(live){live.counted=true;live.isNew=isNew;}
   pendingDraw=recordTitles(activePack,card,counts,index,isNew,Boolean(live?.ticket));
-  if(isNew)$('#reveal-zone .card-magnetic')?.setAttribute('data-new','');
+  if(isNew){$('#reveal-zone .card-magnetic')?.setAttribute('data-new','');$('#reveal-zone .card-entrance')?.insertAdjacentHTML('afterbegin','<div class="new-badge" aria-hidden="true"><span class="nb-rays"></span><span class="nb-rays nb-rays2"></span><span class="nb-text">NEW</span></div>');}
   burstLight(instant?.5:.9);playReveal();
   if(instant)finishReveal(card,isNew);
   else later(()=>finishReveal(card,isNew),reducedMotion.matches?60:timingOf(gradeOf(card)).settle);

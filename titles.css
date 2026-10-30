@@ -115,7 +115,7 @@
 }
 
 /* One-liner under the result card (between the card and the bottom bar; the bar steps down a little while a line is shown). */
-.quip{display:none;position:absolute;z-index:7;left:50%;top:calc(50% - 15px + var(--card-width)*.6984 + 8px);translate:-50% 0;width:min(90vw,440px);margin:0;text-align:center;font-size:13px;line-height:1.45;color:#e8dcb8;word-break:keep-all;text-wrap:balance;text-shadow:0 1px 8px #000,0 0 14px #000;pointer-events:none}
+.quip{display:none;position:absolute;z-index:7;left:50%;top:calc(50% - 15px + var(--card-width)*.6984 + 46px);translate:-50% 0;width:min(90vw,440px);margin:0;text-align:center;font-size:13px;line-height:1.45;color:#e8dcb8;word-break:keep-all;text-wrap:balance;text-shadow:0 1px 8px #000,0 0 14px #000;pointer-events:none}
 #scene[data-view=result][data-phase=revealed]:not(.previewing) .quip:not(:empty){display:block;animation:quip-in .7s ease .45s both}
 #scene[data-view=result][data-quip] #result-actions{top:calc(50% + var(--card-width)*.6984 + 27px)}
 @keyframes quip-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
@@ -445,3 +445,16 @@
 /* The one-liner under "새로운 칭호를 획득했습니다!": the same generous gap on every tier. */
 #title-toast[data-tier][data-tier][data-tier] .tt-flavor{margin-top:max(36px,calc(var(--fs)*.6 + 16px))}
 @media(max-height:500px){#title-toast[data-tier][data-tier][data-tier] .tt-flavor{margin-top:16px}}
+
+/* QA fixes: no one-word orphan lines in names, no reflect smearing over the lines below a two-line popup name, and a readable "칭호 목록 ›" over the card UI. */
+#title-detail[data-tier] .td-body>.td-name,.tier-panel[data-tier] .title-card .tc-name{text-wrap:balance}
+#title-detail[data-tier][data-tier=legend] .td-body>.td-name{-webkit-box-reflect:none}
+#title-toast[data-tier] .tt-link{opacity:.88;text-shadow:0 1px 6px #000,0 0 10px #000,0 0 3px #000}
+
+/* Readability of the lower lines (flavor + "칭호 목록 ›") over the card's own UI: the dark band reaches further down and stays dense there, and the text is brighter with a hard shadow. */
+#title-toast[data-tier]:before{bottom:-44px;background:radial-gradient(ellipse 46% 62% at 50% 50%,rgb(var(--tr)/.1),transparent 100%),linear-gradient(180deg,transparent 0,rgb(3 3 6/.58) 16%,rgb(3 3 6/.74) 36%,rgb(3 3 6/.84) 68%,rgb(3 3 6/.84) 86%,transparent 100%)}
+#title-toast[data-tier] .tt-flavor{color:#fbf4e2;opacity:.96;text-shadow:0 1px 3px #000,0 0 8px #000,0 0 16px #000a}
+#title-toast[data-tier] .tt-pre,#title-toast[data-tier] .tt-post{opacity:.8;text-shadow:0 1px 4px #000,0 0 8px #000a}
+#title-toast[data-tier] .tt-link{opacity:1;color:rgb(var(--tl));font-weight:700;text-decoration:underline;text-decoration-color:rgb(var(--tl)/.45);text-underline-offset:4px;text-shadow:0 1px 3px #000,0 0 8px #000,0 0 14px #000}
+@media(max-height:500px){.quip{top:calc(50% - 15px + var(--card-width)*.6984 + 30px)}}
+@media(min-height:700px){.quip{top:calc(50% - 15px + var(--card-width)*.6984 + 60px)}}
