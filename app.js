@@ -1,17 +1,20 @@
-import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=9';
-import { boxMarkup } from './box3d.js?v=9';
-import { refreshMagnetic, burstLight, resetEffects, stopFx, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain } from './effects.js?v=9';
-import './grades.js?v=9';
+import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=10';
+import { boxMarkup } from './box3d.js?v=10';
+import { refreshMagnetic, burstLight, resetEffects, stopFx, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain } from './effects.js?v=10';
+import './grades.js?v=10';
 
 const $ = (selector) => document.querySelector(selector);
+// Keyboard modality flag: the focus ring only shows while the keyboard is in use (see styles.css).
+document.addEventListener('keydown',()=>{document.documentElement.dataset.kbd='1';},true);
+document.addEventListener('pointerdown',()=>{delete document.documentElement.dataset.kbd;},true);
 const scene = $('#scene');
 const packButton = $('#pack-button');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const escapeHTML = (value) => String(value).replace(/[&<>"']/g,(char)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const countsByPack = new Map();
 let activePack = PACK_SETS[0];
-let phase = 'bundles';
-let view = 'bundles';
+let phase = 'packs';
+let view = 'packs';
 let selectedCard = null;
 let collectionPackId = activePack.id;
 let sequence = 0;
@@ -21,16 +24,25 @@ const TEAR_DONE = .82;
 let prepared = null;
 let drag = null;
 let suppressClick = false;
+let finishing = false;
 
-function readCounts(pack) {
-  let counts = Array(pack.cards.length).fill(0);
+// Saved counts for `length` slots from one storage key, starting at slot `offset`; anything unreadable counts as 0.
+function readStored(key,length,offset=0) {
+  const counts = Array(length).fill(0);
   try {
-    const stored = JSON.parse(localStorage.getItem(pack.storageKey));
+    const stored = JSON.parse(localStorage.getItem(key));
     if (stored?.version === 1 && Array.isArray(stored.counts)) {
-      counts = counts.map((_,index) => Number.isSafeInteger(stored.counts[index]) && stored.counts[index]>=0 && stored.counts[index]<100000000 ? stored.counts[index] : 0);
+      return counts.map((_,index) => { const value=stored.counts[index-offset]; return Number.isSafeInteger(value) && value>=0 && value<100000000 ? value : 0; });
     }
   } catch { /* Opening remains usable with unavailable or invalid storage. */ }
   return counts;
+}
+// pack.legacyStorage = old per-pack records folded into this pack (read-only, never deleted): element-wise max from `offset`.
+function readCounts(pack) {
+  return (pack.legacyStorage||[]).reduce((counts,legacy)=>{
+    const old=readStored(legacy.key,pack.cards.length,legacy.offset);
+    return counts.map((count,index)=>Math.max(count,old[index]));
+  },readStored(pack.storageKey,pack.cards.length));
 }
 // Counts only ever grow, so merging with another tab's saved copy (element-wise max) never loses a card.
 function syncCounts(pack) {
@@ -47,12 +59,16 @@ const stable = () => ['bundles','packs','sealed','revealed','collection'].includ
 function setPhase(next) { phase=next;scene.dataset.phase=next; }
 function setView(next) { view=next;scene.dataset.view=next; }
 function syncNavigation() {
-  $('#result-actions').hidden = !stable() || view==='packs' || (view==='bundles' && !collectionUnlocked);
-  $('#pack-list-open').hidden = !stable() || view==='packs';
+  $('#result-actions').hidden = !stable() || ((view==='bundles' || view==='packs') && !collectionUnlocked);
+  // 'Draw again' only makes sense once a card has been drawn (result) or while browsing the collection; on the box / sealed-pack screens the pack itself is the action.
+  $('#next-pack').hidden = view!=='result' && view!=='collection';
+  // Pack list is the first screen; its twin button is redundant there and on the box screen (whose back button leads to it).
+  $('#pack-list-open').hidden = !stable() || view==='packs' || view==='bundles';
   $('#card-list').hidden = !collectionUnlocked;
   $('#card-list').setAttribute('aria-expanded',String(view==='collection'));
   $('#save-card').hidden = view!=='result' || !selectedCard || phase!=='revealed';
-  $('#choose-bundle').hidden = view==='bundles' || !stable();
+  $('#choose-bundle').hidden = view==='packs' || !stable();
+  $('#choose-bundle').innerHTML = `<span aria-hidden="true">←</span> ${view==='bundles' ? '카드팩 목록' : '꾸러미 선택'}`;
 }
 function later(callback,delay) {
   const token=sequence;
@@ -67,7 +83,11 @@ const timingOf = (grade) => globalThis.GradeFX?.timing(grade) || SSS_TIMING;
 function applyGrade(grade) { const fx=globalThis.GradeFX;if(fx)fx.apply(scene,grade);else scene.setAttribute('data-grade',grade); }
 function clearGrade() { const fx=globalThis.GradeFX;if(fx)fx.clear(scene);else scene.removeAttribute('data-grade'); }
 let live = null; // the draw being opened, once its art is loaded: {card,image,counted,isNew}
-const packGrades = (pack) => [...new Set(pack.cards.map(gradeOf))];
+// Collection order: the highest grade first. Labels come from grades.js (GradeFX.table) with this fallback.
+const COLLECTION_ORDER = ['SSS','SS','S','A','B','C'];
+const GRADE_LABEL = {C:'COMMON',B:'UNCOMMON',A:'RARE',S:'SUPER RARE',SS:'ULTRA RARE',SSS:'SECRET RARE'};
+const gradeLabel = (grade) => globalThis.GradeFX?.table?.[grade]?.label || GRADE_LABEL[grade] || '';
+const packGrades = (pack) => [...new Set(pack.cards.map(gradeOf))].sort((a,b)=>(COLLECTION_ORDER.indexOf(a)+1||99)-(COLLECTION_ORDER.indexOf(b)+1||99));
 function randomInt(size) {
   const values=new Uint32Array(1),limit=Math.floor(4294967296/size)*size;
   do{crypto.getRandomValues(values);}while(values[0]>=limit);
@@ -96,8 +116,9 @@ function loadCard(card) {
   });
 }
 
-function renderBundles() {
-  $('#bundle-stage').innerHTML=PACK_SETS.map((pack)=>`<button class="bundle-choice" data-pack="${escapeHTML(pack.id)}" aria-label="${escapeHTML(pack.label)} 꾸러미 선택"><span class="bundle-float"><span class="bundle-tilt" data-magnetic data-base="-2">${boxMarkup(pack,escapeHTML)}</span></span>${PACK_SETS.length>1?`<span class="bundle-label">${escapeHTML(pack.label)}</span>`:''}</button>`).join('');
+// The box screen shows one box: the pack picked on the pack list.
+function renderBundles(pack=activePack) {
+  $('#bundle-stage').innerHTML=`<button class="bundle-choice" data-pack="${escapeHTML(pack.id)}" aria-label="${escapeHTML(pack.label)} 꾸러미 열기"><span class="bundle-float"><span class="bundle-tilt" data-magnetic data-base="-2">${boxMarkup(pack,escapeHTML)}</span></span></button>`;
   refreshMagnetic();
 }
 // Bundle -> pack: the box turns toward you, its lid swings up, the foil pack rises out and is handed over (FLIP) to the
@@ -149,14 +170,28 @@ function openBundle(stage,choice) {
   later(()=>landPack(choice),BOX_HANDOFF);
   later(()=>enterSealed(stage),BOX_TOTAL);
 }
-function selectPack(packId) {
-  if(phase!=='bundles' && phase!=='packs')return;
-  const pack=PACK_SETS.find((item)=>item.id===packId);if(!pack)return;
-  const fromList=phase==='packs',stage=fromList ? $('#pack-list') : $('#bundle-stage');
+// Pack list -> box screen: the list fades away and the chosen pack's single box takes its place.
+function pickPack(pack) {
   activePack=pack;collectionPackId=pack.id;cancelPending();setPhase('selecting');syncNavigation();
-  document.querySelectorAll('.bundle-choice,.pack-pick').forEach((button)=>button.disabled=true);
+  document.querySelectorAll('.pack-pick').forEach((button)=>button.disabled=true);
+  setPackImage(pack);$('#pack-list').classList.add('departing');
+  later(()=>{
+    $('#pack-list').hidden=true;$('#pack-list').classList.remove('departing');$('#pack-grid').replaceChildren();
+    renderBundles(pack);$('#bundle-stage').classList.add('arriving');$('#bundle-stage').hidden=false;
+    setPhase('bundles');setView('bundles');syncNavigation();
+    $('#bundle-stage .bundle-choice')?.focus({preventScroll:true});
+  },reducedMotion.matches?30:280);
+}
+// Box screen -> sealed pack (box opening), or a short fade when motion is reduced.
+function selectPack(packId) {
+  if(phase!=='packs' && phase!=='bundles')return;
+  const pack=PACK_SETS.find((item)=>item.id===packId);if(!pack)return;
+  if(phase==='packs'){pickPack(pack);return;}
+  const stage=$('#bundle-stage');
+  activePack=pack;collectionPackId=pack.id;cancelPending();setPhase('selecting');syncNavigation();
+  document.querySelectorAll('.bundle-choice').forEach((button)=>button.disabled=true);
   setPackImage(pack);
-  const choice=!fromList && !reducedMotion.matches ? [...stage.querySelectorAll('.bundle-choice')].find((item)=>item.dataset.pack===pack.id) : null;
+  const choice=!reducedMotion.matches ? [...stage.querySelectorAll('.bundle-choice')].find((item)=>item.dataset.pack===pack.id) : null;
   if(choice){openBundle(stage,choice);return;}
   stage.classList.add('departing');
   later(()=>{
@@ -165,12 +200,20 @@ function selectPack(packId) {
     setView('pack');setPhase('sealed');packButton.disabled=false;syncNavigation();refreshMagnetic();
     packButton.focus({preventScroll:true});
     later(()=>packPosition.classList.remove('pack-arriving'),700);
-  },reducedMotion.matches?30:280);
+  },30);
 }
 
+const HAPTIC = {C:[22],B:[30],A:[40,30,40],S:[55,35,55],SS:[70,35,70,35,110],SSS:[90,40,90,40,90,40,180]};
+function haptic(grade) { if(reducedMotion.matches)return;try{navigator.vibrate?.(HAPTIC[grade]||HAPTIC.SSS);}catch{/* Haptics are optional. */} }
 function buildCard(preview=false) {
-  $('#reveal-zone').innerHTML=`<div class="card-entrance"><div class="card-magnetic" data-magnetic><div class="card-surface"><span class="foil" aria-hidden="true"></span><span class="specular" aria-hidden="true"></span>${preview?'':'<span class="emerge-glare" aria-hidden="true"></span>'}</div></div></div>`;
+  $('#reveal-zone').innerHTML=`<div class="card-entrance"><div class="card-magnetic" data-magnetic><div class="card-surface"><span class="foil" aria-hidden="true"></span><span class="specular" aria-hidden="true"></span>${preview?'':'<span class="emerge-glare" aria-hidden="true"><span class="gl-rays"></span></span>'}</div></div></div>`;
   $('#reveal-zone').hidden=false;
+  // The card starts hidden behind the opened pack, narrower than it, and slides up out of the torn top (--rise-out = how far up).
+  const entrance=$('#reveal-zone .card-entrance'),cardW=entrance?.offsetWidth,packW=packPosition.offsetWidth,packH=packPosition.offsetHeight;
+  if(!preview && cardW && packW){
+    const scale=Math.min(.86,packW*.78/cardW),cardH=cardW*1056/756*scale;
+    entrance.style.setProperty('--rise-s',scale.toFixed(3));entrance.style.setProperty('--rise-out',`${(-packH*.395-cardH*.2).toFixed(1)}px`);
+  }
 }
 function fillCardFront(card,image) {
   image.id='revealed-image';image.alt=`${card.name} ${gradeOf(card)} 카드`;image.width=756;image.height=1056;image.draggable=false;
@@ -210,10 +253,14 @@ function prepareDraw() {
   return prepared;
 }
 function setTear(progress,dir=1) {
-  const style=packPosition.style;
+  const style=packPosition.style,front=dir<0?96-progress*92:4+progress*92;
   style.setProperty('--tear',progress.toFixed(3));style.setProperty('--tear-origin',dir<0?'right':'left');style.setProperty('--tear-pos',(dir<0?1-progress:progress).toFixed(3));
+  // the strip is split at the finger: --peel-clip is the torn part (behind it), --cap-clip what is still attached
+  style.setProperty('--front',front.toFixed(2));style.setProperty('--peel-sign',dir<0?'-1':'1');
+  style.setProperty('--peel-clip',dir<0?`inset(0 0 0 ${front.toFixed(2)}%)`:`inset(0 ${(100-front).toFixed(2)}% 0 0)`);
+  style.setProperty('--cap-clip',dir<0?`inset(0 ${(100-front).toFixed(2)}% 0 0)`:`inset(0 0 0 ${front.toFixed(2)}%)`);
 }
-function resetTear() { ['--tear','--tear-origin','--tear-pos'].forEach((name)=>packPosition.style.removeProperty(name));scene.classList.remove('dragging','dragged'); }
+function resetTear() { ['--tear','--tear-origin','--tear-pos','--front','--peel-sign','--peel-clip','--cap-clip'].forEach((name)=>packPosition.style.removeProperty(name));scene.classList.remove('dragging','dragged'); }
 async function openPack({dragged=false}={}) {
   if(phase!=='sealed')return;
   cancelPending();const token=sequence,draw=prepareDraw();prepared=null;
@@ -226,9 +273,10 @@ async function openPack({dragged=false}={}) {
     const T=timingOf(gradeOf(card));applyGrade(gradeOf(card));live={card,image,counted:false,isNew:false};
     const tear=()=>{
       setPhase('tearing');scene.classList.remove('charging','dragging');scene.classList.add('torn');playRip();burstLight(.18);
-      later(()=>{setPhase('opening');scene.classList.add('releasing');burstLight(1);playImpact();},reducedMotion.matches?30:T.tear);
+      // The card slides up out of the torn top while the empty pack is thrown away downwards (CSS, driven by --t-* of the grade).
+      later(()=>{setPhase('opening');scene.classList.add('releasing');buildCard();burstLight(1);playImpact();playWhoosh();haptic(gradeOf(card));},reducedMotion.matches?30:T.tear);
       later(()=>{
-        setPhase('emerging');setView('result');buildCard();playSuspense();playWhoosh();
+        setPhase('emerging');setView('result');playSuspense();
         later(()=>revealCard(card,image),reducedMotion.matches?30:T.reveal);
       },reducedMotion.matches?60:T.emerge);
     };
@@ -249,16 +297,24 @@ function relaxTear(from,dir) {
   };
   requestAnimationFrame(step);
 }
+function finishTear(from,dir) {
+  finishing=true;
+  const start=performance.now(),step=(now)=>{
+    const t=Math.min(1,(now-start)/(reducedMotion.matches?1:170));setTear(from+(1-from)*t*(2-t),dir);
+    if(t<1)requestAnimationFrame(step);else{finishing=false;openPack({dragged:true});}
+  };
+  requestAnimationFrame(step);
+}
 function endDrag(event,cancelled) {
   if(!drag || event.pointerId!==drag.id)return;
   const {active,progress,dir}=drag;drag=null;
   if(!active)return;
   if(!cancelled){suppressClick=true;setTimeout(()=>{suppressClick=false;},60);}
-  if(!cancelled && progress>=TEAR_DONE){setTear(1,dir);openPack({dragged:true});}
+  if(!cancelled && progress>=TEAR_DONE)finishTear(progress,dir);
   else relaxTear(progress,dir);
 }
 packButton.addEventListener('pointerdown',(event)=>{
-  if(phase!=='sealed' || event.isPrimary===false || (event.pointerType==='mouse' && event.button!==0))return;
+  if(phase!=='sealed' || finishing || event.isPrimary===false || (event.pointerType==='mouse' && event.button!==0))return;
   resetTear();playRip(true);
   drag={id:event.pointerId,x:event.clientX,progress:0,dir:1,active:false};
   try{packButton.setPointerCapture(event.pointerId);}catch{/* Drag still works without capture. */}
@@ -278,7 +334,7 @@ packButton.addEventListener('pointercancel',(event)=>endDrag(event,true));
 packButton.addEventListener('lostpointercapture',(event)=>endDrag(event,true));
 
 function clearStage() {
-  cancelPending();selectedCard=null;prepared=null;drag=null;resetTear();
+  cancelPending();collectionReturn=null;selectedCard=null;prepared=null;drag=null;resetTear();
   $('#reveal-zone').hidden=true;$('#reveal-zone').replaceChildren();
   $('#collection-panel').hidden=true;$('#collection-grid').replaceChildren();
   $('#pack-list').hidden=true;$('#pack-list').classList.remove('departing');$('#pack-grid').replaceChildren();
@@ -292,8 +348,8 @@ function clearStage() {
 }
 function showBundles() {
   if(!stable())return;
-  clearStage();setPhase('bundles');setView('bundles');$('#bundle-stage').hidden=false;
-  syncNavigation();refreshMagnetic();
+  clearStage();setPhase('bundles');setView('bundles');renderBundles(activePack);$('#bundle-stage').hidden=false;
+  syncNavigation();
   $('#bundle-stage .bundle-choice')?.focus({preventScroll:true});
 }
 function nextPack() {
@@ -318,25 +374,29 @@ function showPacks() {
   $('#pack-list-title').focus({preventScroll:true});
 }
 
-let collectionFilter={pack:'',grade:'all'};
+// 카드 목록: 등급마다 별도 칸(SSS → C). 미발견 칸은 검은 카드 + ? 만 — 이름/이미지는 DOM 에 넣지 않는다(등급은 칸 머리글로 알 수 있음).
+let collectionReturn=null; // {packId,top}: where the list was scrolled when a card was opened, so closing it lands back there
 function renderCollection(pack) {
-  const counts=getCounts(pack),owned=counts.filter((n)=>n>0).length,grades=packGrades(pack);
-  if(collectionFilter.pack!==pack.id || (collectionFilter.grade!=='all' && !grades.includes(collectionFilter.grade)))collectionFilter={pack:pack.id,grade:'all'};
-  const grade=collectionFilter.grade,chips=$('#grade-chips');
+  const counts=getCounts(pack),owned=counts.filter((n)=>n>0).length,grades=packGrades(pack),chips=$('#grade-chips');
   $('#collection-count').textContent=`${owned} / ${pack.cards.length}`;
   $('#collection-summary').textContent=`${pack.label} · 총 ${counts.reduce((a,b)=>a+b,0).toLocaleString('ko-KR')}장 획득`;
-  $('#pack-tabs').innerHTML=PACK_SETS.map((item)=>`<button class="pack-tab" data-collection-pack="${escapeHTML(item.id)}" aria-pressed="${item.id===pack.id}">${escapeHTML(item.label)}</button>`).join('');
-  // 등급이 둘 이상인 팩만 등급 칩(획득/전체)으로 필터한다. 단일 등급 팩은 기존 화면 그대로.
-  chips.hidden=grades.length<2;
-  chips.innerHTML=grades.length<2 ? '' : ['all',...grades].map((name)=>{
-    const inGrade=pack.cards.map((card,index)=>[card,index]).filter(([card])=>name==='all' || gradeOf(card)===name);
-    return `<button class="grade-chip" data-collection-grade="${escapeHTML(name)}" aria-pressed="${name===grade}">${name==='all'?'전체':escapeHTML(name)} <small>${inGrade.filter(([,index])=>counts[index]>0).length}/${inGrade.length}</small></button>`;
-  }).join('');
-  $('#collection-grid').innerHTML=pack.cards.map((card,index)=>{
-    const count=counts[index];
-    if(grade!=='all' && gradeOf(card)!==grade)return '';
-    if(!count)return '<div class="collection-slot locked"><div class="unknown-card" role="img" aria-label="아직 뽑지 않은 카드"><span aria-hidden="true">?</span></div><p class="unknown-label">미발견</p></div>';
-    return `<button class="collection-slot owned" data-owned-card="${card.id}" data-owned-pack="${escapeHTML(pack.id)}" aria-label="${escapeHTML(card.name)}, ${count}장 보유, 크게 보기"><span class="collection-art"><img src="${escapeHTML(card.image)}" alt="${escapeHTML(card.name)} ${escapeHTML(gradeOf(card))} 카드" width="756" height="1056" loading="lazy" decoding="async"></span><span class="collection-card-name">${escapeHTML(card.name)}<small class="owned-qty">× ${count}</small></span></button>`;
+  // 팩이 하나뿐이면 팩 탭을 숨긴다(팩이 늘면 자동으로 다시 표시).
+  $('#pack-tabs').hidden=PACK_SETS.length<2;
+  $('#pack-tabs').innerHTML=PACK_SETS.length<2 ? '' : PACK_SETS.map((item)=>`<button class="pack-tab" data-collection-pack="${escapeHTML(item.id)}" aria-pressed="${item.id===pack.id}">${escapeHTML(item.label)}</button>`).join('');
+  const byGrade=grades.map((grade)=>{
+    const entries=pack.cards.map((card,index)=>[card,index]).filter(([card])=>gradeOf(card)===grade);
+    return {grade,entries,have:entries.filter(([,index])=>counts[index]>0).length};
+  });
+  // 등급이 둘 이상이면 점프 칩(획득/전체)으로 해당 칸으로 스크롤한다.
+  chips.hidden=byGrade.length<2;
+  chips.innerHTML=byGrade.length<2 ? '' : byGrade.map(({grade,entries,have})=>`<button class="grade-chip" data-jump-grade="${escapeHTML(grade)}" data-grade="${escapeHTML(grade)}" aria-label="${escapeHTML(grade)} 등급으로 이동, ${have} / ${entries.length}">${escapeHTML(grade)} <small>${have}/${entries.length}</small></button>`).join('');
+  $('#collection-grid').innerHTML=byGrade.map(({grade,entries,have})=>{
+    const label=gradeLabel(grade),slots=entries.map(([card,index])=>{
+      const count=counts[index];
+      if(!count)return '<div class="collection-slot locked"><div class="unknown-card" role="img" aria-label="아직 뽑지 않은 카드"><span aria-hidden="true">?</span></div><p class="unknown-label">미발견</p></div>';
+      return `<button class="collection-slot owned" data-owned-card="${card.id}" data-owned-pack="${escapeHTML(pack.id)}" aria-label="${escapeHTML(card.name)}, ${count}장 보유, 크게 보기"><span class="collection-art"><img src="${escapeHTML(card.image)}" alt="${escapeHTML(card.name)} ${escapeHTML(gradeOf(card))} 카드" width="756" height="1056" loading="lazy" decoding="async"></span><span class="collection-card-name">${escapeHTML(card.name)}<small class="owned-qty">× ${count}</small></span></button>`;
+    }).join('');
+    return `<section class="grade-panel" id="grade-panel-${escapeHTML(grade)}" data-grade="${escapeHTML(grade)}" aria-labelledby="grade-panel-${escapeHTML(grade)}-title"><header class="gp-head"><h3 class="gp-title" id="grade-panel-${escapeHTML(grade)}-title"><b>${escapeHTML(grade)}</b>${label?` <span>· ${escapeHTML(label)}</span>`:''}</h3><span class="gp-fx" aria-hidden="true"></span><span class="gp-progress"><span class="gp-num">${have} / ${entries.length}</span><span class="gp-bar" aria-hidden="true"><i style="width:${(have/entries.length*100).toFixed(1)}%"></i></span></span></header><div class="gp-cards">${slots}</div></section>`;
   }).join('');
 }
 function showCollection(packId=activePack.id) {
@@ -346,7 +406,7 @@ function showCollection(packId=activePack.id) {
   $('#bundle-stage').hidden=true;$('#pack-list').hidden=true;$('#pack-position').hidden=true;$('#reveal-zone').hidden=true;$('#reveal-zone').replaceChildren();
   scene.classList.remove('charging','torn','releasing','unveiling','previewing','skipped');clearGrade();live=null;
   setPhase('collection');setView('collection');resetEffects();renderCollection(pack);
-  $('#collection-panel').hidden=false;$('#collection-panel').scrollTop=0;$('#message').textContent='';syncNavigation();
+  $('#collection-panel').hidden=false;$('#collection-panel').scrollTop=collectionReturn?.packId===pack.id ? collectionReturn.top : 0;collectionReturn=null;$('#message').textContent='';syncNavigation();
   $('#collection-title').focus({preventScroll:true});refreshMagnetic();
 }
 async function inspectOwnedCard(packId,cardId) {
@@ -354,6 +414,7 @@ async function inspectOwnedCard(packId,cardId) {
   const pack=PACK_SETS.find((item)=>item.id===packId),index=pack?.cards.findIndex((card)=>String(card.id)===String(cardId));
   if(!pack || index<0 || !getCounts(pack)[index])return;
   cancelPending();const token=sequence,card=pack.cards[index];
+  collectionReturn={packId:pack.id,top:$('#collection-panel').scrollTop||0};
   setPhase('inspecting');$('#collection-grid').setAttribute('aria-busy','true');syncNavigation();
   try{
     const image=await loadCard(card);if(token!==sequence)return;
@@ -369,19 +430,17 @@ async function inspectOwnedCard(packId,cardId) {
 $('#bundle-stage').addEventListener('click',(event)=>{const button=event.target.closest('[data-pack]');if(button)selectPack(button.dataset.pack);});
 packButton.addEventListener('click',()=>{if(suppressClick){suppressClick=false;return;}openPack();});
 $('#next-pack').addEventListener('click',nextPack);
-$('#choose-bundle').addEventListener('click',showBundles);
+$('#choose-bundle').addEventListener('click',()=>view==='bundles' ? showPacks() : showBundles());
 $('#pack-list-open').addEventListener('click',showPacks);
 $('#pack-grid').addEventListener('click',(event)=>{const button=event.target.closest('[data-pick-pack]');if(button)selectPack(button.dataset.pickPack);});
 $('#card-list').addEventListener('click',()=>showCollection(collectionPackId));
 $('#save-card').addEventListener('click',()=>{$('#message').textContent='카드를 저장했어요.';later(()=>{$('#message').textContent='';},2400);});
 $('#pack-tabs').addEventListener('click',(event)=>{const button=event.target.closest('[data-collection-pack]');if(button)showCollection(button.dataset.collectionPack);});
 $('#grade-chips').addEventListener('click',(event)=>{
-  const button=event.target.closest('[data-collection-grade]'),pack=PACK_SETS.find((item)=>item.id===collectionFilter.pack);
-  if(!button || !pack || phase!=='collection')return;
-  collectionFilter.grade=button.dataset.collectionGrade;renderCollection(pack);
-  $('#grade-chips [aria-pressed=true]')?.focus({preventScroll:true});
+  const button=event.target.closest('[data-jump-grade]');if(!button || phase!=='collection')return;
+  $('#grade-panel-'+button.dataset.jumpGrade)?.scrollIntoView?.({behavior:reducedMotion.matches?'auto':'smooth',block:'start'});
 });
 $('#collection-grid').addEventListener('click',(event)=>{const button=event.target.closest('[data-owned-card]');if(button)inspectOwnedCard(button.dataset.ownedPack,button.dataset.ownedCard);});
 $('#skip-fx')?.addEventListener('click',skipOpening);
 document.addEventListener('keydown',(event)=>{if(event.key==='Escape')skipOpening();});
-renderBundles();syncNavigation();
+renderPackList();syncNavigation();refreshMagnetic();

@@ -23,24 +23,33 @@
 .bx-top{transform:translateZ(calc(var(--bd)/2)) rotateX(90deg);background-image:linear-gradient(0deg,#0000,#02020a73),var(--bx-top,url(assets/box-top.webp));box-shadow:inset 0 -1.5px 0 #ffe9b96b,inset 1px 0 0 #edce8740}
 .bx-bottom{transform:rotateX(-90deg) translateZ(calc(var(--bh)/2));background-image:linear-gradient(#0a0914,#050409)}
 
-/* Cellophane sheen on the front: a faint warm-gold wash + a thin core on a fixed light (alpha kept low so it never reads white).
-   effects.js drives --reflection-x from the box orientation; the sway keyframes move it on touch devices. */
-.bx-gloss{position:absolute;inset:0;display:block;pointer-events:none;mix-blend-mode:screen;translate:calc((var(--reflection-x,50%) - 50%)*.42) 0;animation:box3d-glint 9s ease-in-out infinite;
-  background:
-    linear-gradient(104deg,transparent 47.2%,#ffd98a14 48.8%,#ffd98a24 50%,#ffd98a14 51.2%,transparent 52.8%),
-    linear-gradient(104deg,transparent 22%,#ffd98a08 38%,#ffd98a12 50%,#ffd98a08 62%,transparent 78%)}
-/* One thick soft band that sweeps across the front now and then, then rests (same rhythm as the card). It lives in
-   .bx-front, whose overflow:hidden clips it to the face. */
-.bx-shine{position:absolute;top:-10%;left:0;width:50%;height:120%;display:block;pointer-events:none;mix-blend-mode:screen;
-  background:linear-gradient(100deg,transparent 0,#ffd98a22 18%,#ffd98a59 50%,#ffd98a22 82%,transparent 100%);
-  transform:translateX(-240%) skewX(-18deg);animation:bx-shine-pass 5.5s ease-in-out 1.2s infinite}
-@keyframes bx-shine-pass{0%{transform:translateX(-240%) skewX(-18deg)}22%,100%{transform:translateX(360%) skewX(-18deg)}}
+/* Cellophane sheen on the front: only a very faint, wide warm wash (no core line, no moving band, so nothing reads as a
+   thin streak). effects.js drives --reflection-x from the box orientation. */
+.bx-gloss{position:absolute;top:0;bottom:0;left:-50%;width:200%;display:block;pointer-events:none;mix-blend-mode:screen;translate:calc((var(--reflection-x,50%) - 50%)*.21) 0;
+  background:linear-gradient(104deg,transparent 36%,#ffd98a08 43%,#ffd98a12 50%,#ffd98a08 57%,transparent 64%)}
+
+/* ---------- Rainbow foil (pack.holo only: box3d.js emits one .bx-holo span per face + .is-holo, nothing otherwise) ---------- */
+/* Like the card's SSS .foil: a wide 115deg cyan / lilac / gold / pink gradient. One layer per face, mix-blend-mode:color: it
+   re-tints the art's hue while keeping its brightness (it can never wash the box out to white; black stays black). It sits inside the face (overflow:hidden clips it, nothing leaks)
+   and is oversized so it can slide: the tilt (--reflection-x) sets the resting offset (opposite sign on the side planes so
+   they disagree like real foil), and a slow 26s drift keeps the colours moving on touch devices. Alpha per face follows
+   the lighting (left side darkest). */
+.bx-holo{display:none}
+.is-holo .bx-holo{position:absolute;top:-30%;bottom:-30%;left:-65%;width:230%;display:block;pointer-events:none;mix-blend-mode:color;
+  opacity:var(--holo-a,.3);
+  background:repeating-linear-gradient(115deg,transparent 0,#3dffe0 3.5%,#d48cff 7%,#ffd45a 10.5%,#ff7ac6 14%,transparent 18%,transparent 20%);
+  translate:calc((var(--reflection-x,50%) - 50%)*var(--holo-k,.9)) 0;
+  animation:bx-holo-drift 26s ease-in-out infinite alternate}
+.is-holo .bx-front .bx-holo{--holo-a:.3}
+.is-holo .bx-top .bx-holo{--holo-a:.26;--holo-k:.7}
+.is-holo .bx-right .bx-holo{--holo-a:.18;--holo-k:-.7}
+.is-holo .bx-left .bx-holo{--holo-a:.15;--holo-k:-.7}
+@keyframes bx-holo-drift{from{transform:translateX(-9%)}to{transform:translateX(9%)}}
 
 /* Contact shadow / underglow behind the box (a filter would flatten the 3D chain, so it's a plain gradient). */
 .bx-floor{position:absolute;left:50%;bottom:calc(var(--bw)*-.2);width:calc(var(--bw)*1.35);height:calc(var(--bw)*.3);transform:translate3d(-50%,0,calc(var(--bd)*-.7));pointer-events:none;background:radial-gradient(ellipse at 50% 45%,#000 0 30%,#5a46a72e 52%,#0000 72%)}
 
 @keyframes box3d-sway{0%,100%{transform:rotateX(-18deg) rotateY(19deg)}50%{transform:rotateX(-16deg) rotateY(31deg)}}
-@keyframes box3d-glint{0%,100%{transform:translateX(-30%)}50%{transform:translateX(30%)}}
 
 /* ---------- Opening: lid swings up, the pack rises out, the box sinks away ---------- */
 /* Timeline from the click (ms): pose turn 0-600 | lid 80-700 | pack rise 380-1280 | box sinks 300-1750 | fade 1150-1750.
@@ -70,7 +79,7 @@
 .bundle-choice.is-opening .bx-glow{animation:bx-glow-pulse 1.5s ease-out .12s both}
 .bundle-choice.is-opening .bx-shaft{animation:bx-shaft-pulse 1.5s ease-out .3s both}
 .bundle-choice.is-opening .bx-rig{animation:bx-rig-sink 1.45s cubic-bezier(.3,.6,.4,1) .3s both}
-.bundle-choice.is-opening .bx-floor,.bundle-choice.is-opening .bx-shine,.bundle-choice.is-opening .bundle-label{animation:bx-fade .5s ease-in .5s both}
+.bundle-choice.is-opening .bx-floor,.bundle-choice.is-opening .bundle-label{animation:bx-fade .5s ease-in .5s both}
 #bundle-stage.opening{overflow:hidden}
 #bundle-stage.opening .bundle-choice:not(.is-opening){opacity:0;transition:opacity .5s;pointer-events:none}
 
@@ -103,10 +112,7 @@
 .card-surface .foil{opacity:.08;mix-blend-mode:screen;background:repeating-linear-gradient(115deg,transparent 0,#5affdd 15%,#e5a8ff 25%,#ffdb7b 35%,transparent 50%);background-size:260% 260%;background-position:var(--spec-pos) 50%}
 
 @media(prefers-reduced-motion:reduce){
-  .box3d,.bx-gloss{animation:none}
+  .box3d,.is-holo .bx-holo{animation:none}
   .card-surface .specular{display:none}
-}
-@media(prefers-reduced-motion:reduce){
-  .bx-shine{display:none}
 }
 @supports(height:1svh){.bundle-choice{--bw:min(300px,60vw,42svh)}}
