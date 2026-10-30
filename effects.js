@@ -63,19 +63,64 @@ document.addEventListener('mouseleave',settle);
 document.addEventListener('mouseout',(event)=>{if(!event.relatedTarget)settle();});
 finePointer.addEventListener('change',()=>{settle();startMotion();});
 
+// Grade presets live in grades.js (globalThis.GradeFX); without it every effect falls back to the SSS look below.
+const BASE_FX={rgb:[255,201,102],light:[255,243,207],rays:{gain:1,prism:0,resid:1},burst:{count:110,speed:300,size:2.4,life:1,star:0},dust:0,palette:[[255,201,102],[255,243,207]],
+  timing:{charge:1200},sound:{notes:[392,587.33,783.99,1174.66,1567.98,2349.32,3135.96],gap:.1,delay:.45,level:.04,tail:2.1,charge:1,impact:1,suspense:1,whoosh:1,boom:0,sting:false}};
+const fxOf=(grade)=>{const table=globalThis.GradeFX?.table;return table?.[grade]||table?.SSS||BASE_FX;};
+// Low-end phones get fewer particles; nobody gets more than MAX_PARTICLES alive at once.
+const MAX_PARTICLES=320;
+const lowEnd=typeof navigator!=='undefined'&&((navigator.hardwareConcurrency||8)<=4||(navigator.deviceMemory||8)<=2);
+let burstFx=null;
+let dust=[];
+const pickColor=(palette)=>palette[Math.random()<.5?0:Math.floor(Math.random()*palette.length)];
+
 // Only cosmetic particles use Math.random. Card selection uses crypto in app.js.
-export function burstLight(power=1){
-  burstAt=performance.now();burstPower=power;
+export function burstLight(power=1,grade){
+  const fx=fxOf(grade??scene.dataset.grade);
+  burstAt=performance.now();burstPower=power;burstFx=fx;
   if(reduceMotion.matches)return;
   const rect=document.querySelector('#pack-position').getBoundingClientRect();
   const x=innerWidth/2,y=power<.4?rect.top+rect.height*.106:innerHeight*.47;
-  const count=Math.round(110*power);
+  const b=fx.burst,count=Math.max(0,Math.min(MAX_PARTICLES-particles.length,Math.round(b.count*power*(lowEnd?.6:1))));
   for(let i=0;i<count;i++){
-    const angle=Math.random()*Math.PI*2,speed=50+Math.random()*300*power;
-    particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,born:burstAt,life:1700+Math.random()*1700,size:.8+Math.random()*(power>.4?2.4:1.5),white:Math.random()<.3});
+    const angle=Math.random()*Math.PI*2,speed=50+Math.random()*b.speed*power;
+    particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,born:burstAt,life:(1700+Math.random()*1700)*b.life,size:.8+Math.random()*(power>.4?b.size:b.size*.625),star:Math.random()<b.star,color:pickColor(fx.palette)});
   }
 }
-export function resetEffects(){burstAt=-10000;burstPower=0;particles=[];settle();}
+// Cuts sounds already scheduled (skip / leaving the result) and clears the particles.
+export function stopFx(){
+  particles=[];dust=[];
+  const old=bus;bus=null;
+  if(old)try{old.gain.setTargetAtTime(0,audio.currentTime,.03);setTimeout(()=>{try{old.disconnect();}catch{/* Already gone. */}},500);}catch{/* Audio is optional. */}
+}
+export function resetEffects(){burstAt=-10000;burstPower=0;burstFx=null;particles=[];dust=[];stopFx();settle();}
+
+// Small cached glow sprites replace per-particle shadowBlur (much cheaper on phones). 'star' adds a four-point sparkle.
+const sprites=new Map();
+function sprite(star,color){
+  const key=(star?'s':'d')+color;
+  if(sprites.has(key))return sprites.get(key);
+  const canvas=document.createElement('canvas');canvas.width=canvas.height=32;
+  const g=canvas.getContext('2d');
+  if(!g){sprites.set(key,null);return null;}
+  const c=color.join(','),glow=g.createRadialGradient(16,16,0,16,16,16);
+  glow.addColorStop(0,'rgba(255,255,255,.95)');glow.addColorStop(.18,`rgba(${c},.95)`);glow.addColorStop(.5,`rgba(${c},.26)`);glow.addColorStop(1,`rgba(${c},0)`);
+  g.fillStyle=glow;g.fillRect(0,0,32,32);
+  if(star){
+    const h=g.createLinearGradient(0,0,32,0),v=g.createLinearGradient(0,0,0,32);
+    for(const line of [h,v]){line.addColorStop(0,`rgba(${c},0)`);line.addColorStop(.5,'rgba(255,255,255,.9)');line.addColorStop(1,`rgba(${c},0)`);}
+    g.fillStyle=h;g.fillRect(0,15,32,2);g.fillStyle=v;g.fillRect(15,0,2,32);
+  }
+  sprites.set(key,canvas);return canvas;
+}
+let lastDust=0;
+function spawnDust(fx,time){
+  const wide=innerWidth<=600,cw=Math.min(wide?290:360,innerWidth*(wide?.73:.72),innerHeight*(wide?.43:.44));
+  const cap=Math.round(fx.dust*(lowEnd?.5:1));
+  if(dust.length>=cap||time-lastDust<110)return;
+  lastDust=time;
+  dust.push({x:innerWidth/2+(Math.random()-.5)*cw*1.25,y:innerHeight/2-15+(Math.random()-.2)*cw*1.2,vy:-(9+Math.random()*16),sway:Math.random()*6.28,born:time,life:3200+Math.random()*2400,size:.9+Math.random()*1.4,color:pickColor(fx.palette)});
+}
 
 function createRayRenderer(){
   const canvas=document.querySelector('#light-canvas');
@@ -83,7 +128,7 @@ function createRayRenderer(){
   if(!gl)return null;
   const vertex='attribute vec2 a_position;void main(){gl_Position=vec4(a_position,0.,1.);}';
   const fragment=`precision mediump float;
-    uniform vec2 u_resolution;uniform float u_time;uniform float u_power;
+    uniform vec2 u_resolution;uniform float u_time;uniform float u_power;uniform vec3 u_color;uniform float u_prism;
     float volume(vec3 p){
       float r=length(p.xy);float angle=atan(p.y,p.x);
       float streak=pow(max(0.,sin(angle*18.+sin(p.z*.7)+u_time*.12)),12.);
@@ -100,7 +145,8 @@ function createRayRenderer(){
         fog+=volume(p)*transmittance*.12;transmittance*=.97;
       }
       float edge=1.-smoothstep(.4,1.6,length(uv));
-      vec3 color=vec3(1.,.79,.4)*fog*u_power*edge;
+      vec3 rainbow=.5+.5*cos(6.2832*(atan(uv.y,uv.x)*.159+vec3(0.,.33,.67)+u_time*.02));
+      vec3 color=mix(u_color,rainbow,u_prism)*fog*u_power*edge;
       gl_FragColor=vec4(color,1.);
     }`;
   function compile(type,source){const shader=gl.createShader(type);gl.shaderSource(shader,source);gl.compileShader(shader);if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){gl.deleteShader(shader);return null;}return shader;}
@@ -111,12 +157,12 @@ function createRayRenderer(){
   gl.useProgram(program);
   const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);
   const position=gl.getAttribLocation(program,'a_position');gl.enableVertexAttribArray(position);gl.vertexAttribPointer(position,2,gl.FLOAT,false,0,0);
-  const resolution=gl.getUniformLocation(program,'u_resolution'),timeUniform=gl.getUniformLocation(program,'u_time'),powerUniform=gl.getUniformLocation(program,'u_power');
-  let lost=false,lastPower=-1;
+  const resolution=gl.getUniformLocation(program,'u_resolution'),timeUniform=gl.getUniformLocation(program,'u_time'),powerUniform=gl.getUniformLocation(program,'u_power'),colorUniform=gl.getUniformLocation(program,'u_color'),prismUniform=gl.getUniformLocation(program,'u_prism');
+  let lost=false,lastPower=-1,lastTint='';
   canvas.addEventListener('webglcontextlost',(event)=>{event.preventDefault();lost=true;});
   return {
     resize(width,height){const scale=Math.min(1,850/width);canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);gl.viewport(0,0,canvas.width,canvas.height);gl.uniform2f(resolution,canvas.width,canvas.height);},
-    render(time,power){if(lost)return;if(power===0&&lastPower===0)return;lastPower=power;gl.uniform1f(timeUniform,(time/1000)%1200);gl.uniform1f(powerUniform,power);gl.drawArrays(gl.TRIANGLES,0,6);}
+    render(time,power,color,prism){if(lost)return;if(power===0&&lastPower===0)return;lastPower=power;const tint=`${color}|${prism}`;if(tint!==lastTint){lastTint=tint;gl.uniform3f(colorUniform,color[0]/255,color[1]/255,color[2]/255);gl.uniform1f(prismUniform,prism);}gl.uniform1f(timeUniform,(time/1000)%1200);gl.uniform1f(powerUniform,power);gl.drawArrays(gl.TRIANGLES,0,6);}
   };
 }
 
@@ -141,19 +187,30 @@ function createSpace(){
       ctx.fillStyle=`rgba(211,220,235,${star.alpha*flicker})`;
       ctx.beginPath();ctx.arc(star.x,star.y,star.r,0,Math.PI*2);ctx.fill();
     }
+    const now=fxOf(scene.dataset.grade);
     if(!reduceMotion.matches){
+      ctx.globalCompositeOperation='lighter';
       particles=particles.filter((p)=>time-p.born<p.life);
       for(const p of particles){
-        const seconds=(time-p.born)/1000,alpha=Math.max(0,1-(time-p.born)/p.life);
-        const x=p.x+p.vx*seconds,y=p.y+p.vy*seconds+seconds*seconds*12;
-        ctx.fillStyle=p.white?`rgba(255,250,235,${alpha*.95})`:`rgba(255,218,151,${alpha*.85})`;ctx.shadowColor='#ffd282';ctx.shadowBlur=p.size>2?10:6;
-        ctx.fillRect(x,y,p.size,p.size);ctx.shadowBlur=0;
+        const seconds=(time-p.born)/1000,alpha=Math.max(0,1-(time-p.born)/p.life),image=sprite(p.star,p.color);if(!image)continue;
+        const x=p.x+p.vx*seconds,y=p.y+p.vy*seconds+seconds*seconds*12,size=p.size*(p.star?7:4.2);
+        ctx.globalAlpha=alpha*(p.star?.65+.35*Math.sin(time*.012+p.x):.9);ctx.drawImage(image,x-size/2,y-size/2,size,size);
       }
+      // Quiet star dust keeps drifting around a high-grade card once it is shown (not when only inspecting an owned card).
+      if(now.dust>0 && scene.dataset.phase==='revealed' && !scene.classList.contains('previewing'))spawnDust(now,time);
+      dust=dust.filter((d)=>time-d.born<d.life);
+      for(const d of dust){
+        const t=(time-d.born)/d.life,image=sprite(true,d.color);if(!image)continue;
+        const size=d.size*7,x=d.x+Math.sin(d.sway+t*5)*10,y=d.y+d.vy*t*d.life/1000;
+        ctx.globalAlpha=Math.sin(Math.PI*t)*(.5+.4*Math.sin(time*.006+d.sway));ctx.drawImage(image,x-size/2,y-size/2,size,size);
+      }
+      ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
     }
-    const age=Math.max(0,(time-burstAt)/1000);
-    const residual=scene.dataset.phase==='revealed'?.17:0;
-    const power=reduceMotion.matches?0:Math.max(residual,burstPower*Math.exp(-age*.65)*2.8);
-    rays?.render(time,power<.005?0:power);
+    const age=Math.max(0,(time-burstAt)/1000),burstFor=burstFx||now;
+    const residual=scene.dataset.phase==='revealed'?.17*now.rays.resid:0;
+    const burst=burstPower*Math.exp(-age*.65)*2.8*burstFor.rays.gain;
+    const power=reduceMotion.matches?0:Math.max(residual,burst),tint=burst>residual?burstFor:now;
+    rays?.render(time,power<.005?0:power,tint.rgb,tint.rays.prism);
   }
   function tick(time){frame=0;if(document.hidden)return;if(time-lastFrame>33){lastFrame=time;draw(time);}if(!reduceMotion.matches)frame=requestAnimationFrame(tick);}
   function sync(){cancelAnimationFrame(frame);frame=0;if(!document.hidden){draw(performance.now());if(!reduceMotion.matches)frame=requestAnimationFrame(tick);}}
@@ -169,6 +226,19 @@ reduceMotion.addEventListener('change',()=>{settle();reduceMotion.matches?stopMo
 function getAudio(){
   try{audio ||= new (window.AudioContext||window.webkitAudioContext)();audio.resume().catch(()=>{});return audio;}catch{return null;}
 }
+// Every effect sound goes through one bus (+ a soft limiter) so stopFx() can cut whatever is still scheduled.
+let master=null,bus=null;
+function out(ac){
+  if(!master){master=ac.createDynamicsCompressor();master.threshold.value=-16;master.knee.value=20;master.ratio.value=5;master.attack.value=.004;master.release.value=.25;master.connect(ac.destination);}
+  if(!bus){bus=ac.createGain();bus.connect(master);}
+  return bus;
+}
+const soundOf=(grade)=>fxOf(grade??scene.dataset.grade).sound;
+function ping(ac,dest,frequency,at,level,tail,type='sine'){
+  const osc=ac.createOscillator(),gain=ac.createGain();osc.type=type;osc.frequency.setValueAtTime(frequency*.94,at);osc.frequency.exponentialRampToValueAtTime(frequency,at+.035);
+  gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(level,at+.025);gain.gain.exponentialRampToValueAtTime(.0001,at+tail);
+  osc.connect(gain).connect(dest);osc.start(at);osc.stop(at+tail+.05);
+}
 export function playRip(unlockOnly=false){
   const ac=getAudio();if(!ac||unlockOnly)return;
   try{
@@ -177,46 +247,63 @@ export function playRip(unlockOnly=false){
     const source=ac.createBufferSource(),filter=ac.createBiquadFilter(),gain=ac.createGain();
     source.buffer=buffer;filter.type='bandpass';filter.frequency.setValueAtTime(700,ac.currentTime);filter.frequency.exponentialRampToValueAtTime(4000,ac.currentTime+1.1);filter.Q.value=.65;
     gain.gain.setValueAtTime(0,ac.currentTime);gain.gain.linearRampToValueAtTime(.17,ac.currentTime+.08);gain.gain.setValueAtTime(.14,ac.currentTime+.85);gain.gain.exponentialRampToValueAtTime(.001,ac.currentTime+1.25);
-    source.connect(filter).connect(gain).connect(ac.destination);source.start();source.stop(ac.currentTime+1.27);
+    source.connect(filter).connect(gain).connect(out(ac));source.start();source.stop(ac.currentTime+1.27);
   }catch{/* Audio is optional. */}
 }
-export function playReveal(){
+// Reveal: low grades are one short "pop" arpeggio; every step up adds notes, a low boom, sparkles and a longer tail; SSS ends with a stinger.
+export function playReveal(grade){
   const ac=getAudio();if(!ac)return;
-  try{[392,587.33,783.99,1174.66,1567.98,2349.32,3135.96].forEach((frequency,i)=>{
-    const at=ac.currentTime+.45+i*.1,osc=ac.createOscillator(),gain=ac.createGain();osc.type='sine';osc.frequency.value=frequency;
-    gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.04-i*.003,at+.025);gain.gain.exponentialRampToValueAtTime(.0001,at+2.1);
-    osc.connect(gain).connect(ac.destination);osc.start(at);osc.stop(at+2.15);
-  });}catch{/* Audio is optional. */}
+  try{
+    const s=soundOf(grade),dest=out(ac),now=ac.currentTime;
+    s.notes.forEach((frequency,i)=>ping(ac,dest,frequency,now+s.delay+i*s.gap,Math.max(.012,s.level-i*.003),s.tail));
+    if(s.boom>0){
+      const osc=ac.createOscillator(),gain=ac.createGain(),at=now+.04;osc.type='sine';osc.frequency.setValueAtTime(130,at);osc.frequency.exponentialRampToValueAtTime(42,at+.55);
+      gain.gain.setValueAtTime(.12*s.boom,at);gain.gain.exponentialRampToValueAtTime(.001,at+1.1);osc.connect(gain).connect(dest);osc.start(at);osc.stop(at+1.15);
+    }
+    if(s.boom>=.5)for(let i=0,pings=Math.round(s.boom*4);i<pings;i++)ping(ac,dest,[2093,2637.02,3135.96,3951.07][i%4],now+s.delay+.15+i*.17,.012,.55);
+    if(s.sting){
+      const filter=ac.createBiquadFilter(),gain=ac.createGain(),at=now+.05;filter.type='lowpass';filter.frequency.setValueAtTime(500,at);filter.frequency.exponentialRampToValueAtTime(3400,at+.5);
+      gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.034,at+.22);gain.gain.exponentialRampToValueAtTime(.0001,at+1.7);filter.connect(gain).connect(dest);
+      [196,293.66,392,493.88].forEach((frequency)=>{const osc=ac.createOscillator();osc.type='sawtooth';osc.frequency.value=frequency;osc.detune.value=(Math.random()-.5)*10;osc.connect(filter);osc.start(at);osc.stop(at+1.75);});
+    }
+  }catch{/* Audio is optional. */}
 }
 
-export function playCharge(){
+export function playCharge(grade){
   const ac=getAudio();if(!ac)return;
   try{
-    const osc=ac.createOscillator(),gain=ac.createGain(),at=ac.currentTime;osc.type='triangle';osc.frequency.setValueAtTime(60,at);osc.frequency.exponentialRampToValueAtTime(260,at+1.15);gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.055,at+1.05);gain.gain.exponentialRampToValueAtTime(.001,at+1.25);osc.connect(gain).connect(ac.destination);osc.start();osc.stop(at+1.3);
-    const rumble=ac.createOscillator(),rgain=ac.createGain();rumble.type='sine';rumble.frequency.setValueAtTime(38,at);rumble.frequency.linearRampToValueAtTime(70,at+1.2);rgain.gain.setValueAtTime(0,at);rgain.gain.linearRampToValueAtTime(.08,at+1.1);rgain.gain.exponentialRampToValueAtTime(.001,at+1.3);rumble.connect(rgain).connect(ac.destination);rumble.start();rumble.stop(at+1.35);
+    const fx=fxOf(grade??scene.dataset.grade),s=fx.sound,dest=out(ac),at=ac.currentTime,d=Math.max(.3,(fx.timing.charge||1200)/1000-.05);
+    const osc=ac.createOscillator(),gain=ac.createGain();osc.type='triangle';osc.frequency.setValueAtTime(60,at);osc.frequency.exponentialRampToValueAtTime(260,at+d);gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.055*s.charge,at+d-.1);gain.gain.exponentialRampToValueAtTime(.001,at+d+.1);osc.connect(gain).connect(dest);osc.start();osc.stop(at+d+.15);
+    const rumble=ac.createOscillator(),rgain=ac.createGain();rumble.type='sine';rumble.frequency.setValueAtTime(38,at);rumble.frequency.linearRampToValueAtTime(70,at+d+.05);rgain.gain.setValueAtTime(0,at);rgain.gain.linearRampToValueAtTime(.08*s.charge,at+d-.05);rgain.gain.exponentialRampToValueAtTime(.001,at+d+.15);rumble.connect(rgain).connect(dest);rumble.start();rumble.stop(at+d+.2);
+    if(s.boom>=.8){
+      const shimmer=ac.createOscillator(),sgain=ac.createGain();shimmer.type='sine';shimmer.frequency.setValueAtTime(520,at);shimmer.frequency.exponentialRampToValueAtTime(2300,at+d);sgain.gain.setValueAtTime(0,at);sgain.gain.linearRampToValueAtTime(.014,at+d-.05);sgain.gain.exponentialRampToValueAtTime(.0001,at+d+.12);shimmer.connect(sgain).connect(dest);shimmer.start();shimmer.stop(at+d+.15);
+    }
   }catch{}
 }
-export function playImpact(){
+export function playImpact(grade){
   const ac=getAudio();if(!ac)return;
   try{
-    const at=ac.currentTime,osc=ac.createOscillator(),gain=ac.createGain();osc.type='sine';osc.frequency.setValueAtTime(135,at);osc.frequency.exponentialRampToValueAtTime(35,at+.6);gain.gain.setValueAtTime(.13,at);gain.gain.exponentialRampToValueAtTime(.001,at+1.2);osc.connect(gain).connect(ac.destination);osc.start();osc.stop(at+1.25);
+    const k=soundOf(grade).impact,dest=out(ac),at=ac.currentTime,osc=ac.createOscillator(),gain=ac.createGain();osc.type='sine';osc.frequency.setValueAtTime(135,at);osc.frequency.exponentialRampToValueAtTime(35,at+.6);gain.gain.setValueAtTime(.13*k,at);gain.gain.exponentialRampToValueAtTime(.001,at+1.2);osc.connect(gain).connect(dest);osc.start();osc.stop(at+1.25);
     const buffer=ac.createBuffer(1,ac.sampleRate,ac.sampleRate),data=buffer.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
-    const source=ac.createBufferSource(),filter=ac.createBiquadFilter(),air=ac.createGain();source.buffer=buffer;filter.type='lowpass';filter.frequency.setValueAtTime(5000,at);filter.frequency.exponentialRampToValueAtTime(180,at+.9);air.gain.setValueAtTime(0,at);air.gain.linearRampToValueAtTime(.1,at+.1);air.gain.exponentialRampToValueAtTime(.001,at+1);source.connect(filter).connect(air).connect(ac.destination);source.start();source.stop(at+1.05);
+    const source=ac.createBufferSource(),filter=ac.createBiquadFilter(),air=ac.createGain();source.buffer=buffer;filter.type='lowpass';filter.frequency.setValueAtTime(5000,at);filter.frequency.exponentialRampToValueAtTime(180,at+.9);air.gain.setValueAtTime(0,at);air.gain.linearRampToValueAtTime(.1*k,at+.1);air.gain.exponentialRampToValueAtTime(.001,at+1);source.connect(filter).connect(air).connect(dest);source.start();source.stop(at+1.05);
   }catch{}
 }
-export function playSuspense(){
-  const ac=getAudio();if(!ac)return;
-  try{[1174.66,1567.98].forEach((frequency,i)=>{const at=ac.currentTime,osc=ac.createOscillator(),gain=ac.createGain();osc.type='sine';osc.frequency.setValueAtTime(frequency,at);osc.frequency.linearRampToValueAtTime(frequency+6,at+2.2);gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(i?.012:.025,at+.15);gain.gain.exponentialRampToValueAtTime(.0001,at+2.6);osc.connect(gain).connect(ac.destination);osc.start();osc.stop(at+2.65);});}catch{}
-}
-export function playWhoosh(){
+export function playSuspense(grade){
   const ac=getAudio();if(!ac)return;
   try{
-    const at=ac.currentTime,length=Math.round(ac.sampleRate*.9),buffer=ac.createBuffer(1,length,ac.sampleRate),data=buffer.getChannelData(0);
+    const k=soundOf(grade).suspense,dest=out(ac);if(!k)return;
+    [1174.66,1567.98].forEach((frequency,i)=>{const at=ac.currentTime,osc=ac.createOscillator(),gain=ac.createGain();osc.type='sine';osc.frequency.setValueAtTime(frequency,at);osc.frequency.linearRampToValueAtTime(frequency+6,at+2.2);gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime((i?.012:.025)*k,at+.15);gain.gain.exponentialRampToValueAtTime(.0001,at+2.6);osc.connect(gain).connect(dest);osc.start();osc.stop(at+2.65);});
+  }catch{}
+}
+export function playWhoosh(grade){
+  const ac=getAudio();if(!ac)return;
+  try{
+    const k=soundOf(grade).whoosh,dest=out(ac),at=ac.currentTime,length=Math.round(ac.sampleRate*.9),buffer=ac.createBuffer(1,length,ac.sampleRate),data=buffer.getChannelData(0);
     for(let i=0;i<length;i++)data[i]=Math.random()*2-1;
     const source=ac.createBufferSource(),filter=ac.createBiquadFilter(),gain=ac.createGain();
     source.buffer=buffer;filter.type='bandpass';filter.Q.value=1.2;filter.frequency.setValueAtTime(250,at);filter.frequency.exponentialRampToValueAtTime(3200,at+.8);
-    gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.09,at+.35);gain.gain.exponentialRampToValueAtTime(.001,at+.9);
-    source.connect(filter).connect(gain).connect(ac.destination);source.start();source.stop(at+.92);
+    gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.09*k,at+.35);gain.gain.exponentialRampToValueAtTime(.001,at+.9);
+    source.connect(filter).connect(gain).connect(dest);source.start();source.stop(at+.92);
   }catch{}
 }
 // A short paper-tear grain per drag step; louder the further the tear advanced.
@@ -229,6 +316,6 @@ export function playTearGrain(progress){
     for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*(1-i/length);
     const source=ac.createBufferSource(),filter=ac.createBiquadFilter(),gain=ac.createGain();
     source.buffer=buffer;filter.type='bandpass';filter.frequency.value=1800+progress*2600;filter.Q.value=.8;gain.gain.value=.05+progress*.05;
-    source.connect(filter).connect(gain).connect(ac.destination);source.start();
+    source.connect(filter).connect(gain).connect(out(ac));source.start();
   }catch{}
 }

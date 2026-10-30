@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
   <meta name="description" content="우주 속 카드 꾸러미를 고르고, 밀봉 팩을 뜯어 숨겨진 카드를 만나보세요.">
-  <title>CHIIKAWA — SECRET PACK</title>
+  <title>CHIIKAWA — CARD PACK</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23000'/%3E%3Cpath d='M32 8 38 26 56 32 38 38 32 56 26 38 8 32 26 26Z' fill='%23e7ca82'/%3E%3C/svg%3E">
   <link rel="preload" href="assets/box-front.webp" as="image">
-  <link rel="stylesheet" href="styles.css?v=8">
-  <link rel="stylesheet" href="box3d.css?v=8">
-  <link rel="stylesheet" href="card-shine.css?v=8">
-  <script src="app.js?v=8" type="module"></script>
+  <link rel="stylesheet" href="styles.css?v=9">
+  <link rel="stylesheet" href="box3d.css?v=9">
+  <link rel="stylesheet" href="card-shine.css?v=9">
+  <link rel="stylesheet" href="grade-fx.css?v=9">
+  <script src="app.js?v=9" type="module"></script>
 </head>
 <body>
   <main id="scene" data-phase="bundles" data-view="bundles" aria-label="우주 속 카드 꾸러미와 카드팩">
@@ -47,6 +48,7 @@
       <div class="collection-inner">
         <div class="collection-heading"><h2 id="collection-title" tabindex="-1">카드 목록</h2><p id="collection-count"></p></div>
         <div id="pack-tabs" role="group" aria-label="카드팩별 목록"></div>
+        <div id="grade-chips" role="group" aria-label="등급별 보기" hidden></div>
         <p id="collection-summary"></p>
         <div id="collection-grid"></div>
       </div>

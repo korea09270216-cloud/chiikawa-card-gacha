@@ -1,0 +1,137 @@
+/* ---------- Grade spectacle (C < B < A < S < SS < SSS) ----------
+   Loaded after styles.css / box3d.css / card-shine.css. grades.js sets, on #scene, data-grade, data-rings and the custom properties
+   --g-rgb / --g-rgb2 / --g-rgb3 (main / light / deep colour as "r g b"), --t-* (timings, ms), --spin, --shake, --dark, --bloom, --banner-dur.
+   The var() fallbacks below are the SSS values, so a missing grade still looks like the original gold opening.
+   Colour tell: the charge-up stays neutral gold; the grade colour appears when the foil tears (.torn) and blooms at the release. */
+
+/* ---- 1. Phase lengths follow the grade (JS and CSS share the --t-* numbers; SSS = the original 1200/1150/1600/1300) ---- */
+#scene.charging .pack-float,#scene.charging .light-bloom,#scene.charging .pack-position:before{animation-duration:var(--t-charge,1.2s)}
+#scene.torn:not(.releasing) .pack-position:before{animation-duration:var(--t-tear,1.15s)}
+#scene.torn .pack-cap{animation-duration:calc(var(--t-emerge,1.6s) + .1s)}
+#scene.torn:not(.releasing) .pack-lower{animation-duration:calc(var(--t-tear,1.15s) + .1s)}
+#scene.torn .tear-light{animation-duration:calc(var(--t-tear,1.15s)*.87)}
+#scene.torn:not(.releasing):not(.unveiling) .light-bloom{animation-duration:calc(var(--t-tear,1.15s) + .35s)}
+#scene.torn .tear-spark{animation-duration:calc(var(--t-tear,1.15s) + .15s)}
+#scene.releasing .pack-lower{animation-duration:calc(var(--t-emerge,1.6s) + .3s)}
+#scene.unveiling .emerge-glare{animation-duration:var(--t-reveal,1.3s)}
+.card-entrance:after{animation-duration:var(--t-reveal,1.3s)}
+
+/* ---- 2. Rise: spin count and pop height by grade (C/B come up without turning) ---- */
+#scene[data-grade=C]{--rise-pop:1.05;--rise-lift:-7%;--gb-size:12px;--gb-glow:.3}
+#scene[data-grade=B]{--rise-pop:1.08;--rise-lift:-9%;--gb-size:13px;--gb-glow:.4}
+#scene[data-grade=A]{--rise-pop:1.12;--rise-lift:-12%;--gb-size:15px;--gb-glow:.55}
+#scene[data-grade=S]{--gb-size:16px;--gb-glow:.7}
+#scene[data-grade=SS]{--gb-size:18px;--gb-glow:.9}
+#scene[data-grade=SSS]{--gb-size:20px;--gb-glow:1.1}
+@keyframes g-rise{
+  0%{opacity:0;transform:translateY(38%) scale(.32) rotateY(0)}
+  14%{opacity:1}
+  58%{transform:translateY(var(--rise-lift,-15%)) scale(var(--rise-pop,1.15)) rotateY(calc(var(--spin,2)*280deg))}
+  80%{transform:translateY(calc(var(--rise-lift,-15%)/3)) scale(calc(1 + (var(--rise-pop,1.15) - 1)/3)) rotateY(calc(var(--spin,2)*345deg))}
+  100%{opacity:1;transform:translateY(0) scale(1) rotateY(calc(var(--spin,2)*360deg))}}
+/* Only while the card is still arriving: the revealed / inspect states keep `animation:none` from styles.css. */
+#scene[data-grade]:not([data-phase=revealed]):not(.previewing) .card-entrance{animation-name:g-rise;animation-duration:var(--t-reveal,1.3s)}
+
+/* ---- 3. Colour tell from the tear on ---- */
+@keyframes g-zip-light{
+  0%{opacity:0;transform:scaleX(var(--tear,0))}12%{opacity:1}
+  50%{transform:scaleX(1);opacity:1;height:3px;box-shadow:0 0 15px rgb(var(--g-rgb2)),0 0 40px rgb(var(--g-rgb)),0 0 90px rgb(var(--g-rgb3))}
+  100%{transform:scaleX(1);opacity:0}}
+#scene[data-grade].torn .tear-light{background:rgb(var(--g-rgb2));box-shadow:0 0 7px rgb(var(--g-rgb2)),0 0 18px rgb(var(--g-rgb)),0 0 40px rgb(var(--g-rgb3));animation:g-zip-light calc(var(--t-tear,1.15s)*.87) ease-out forwards}
+#scene[data-grade].torn .tear-spark{background:radial-gradient(circle,#fff 0,rgb(var(--g-rgb2)) 8%,rgb(var(--g-rgb)/.34) 24%,transparent 70%)}
+#scene[data-grade].torn .pack-position:before{background:radial-gradient(closest-side,rgb(var(--g-rgb2)/.62),rgb(var(--g-rgb)/.3) 46%,transparent)}
+#scene[data-grade].torn .light-bloom{background:radial-gradient(ellipse at 50% 46%,rgb(var(--g-rgb2)/calc(.55*var(--bloom,1))) 0%,rgb(var(--g-rgb)/calc(.22*var(--bloom,1))) 9%,rgb(var(--g-rgb3)/calc(.07*var(--bloom,1))) 22%,transparent 45%)}
+#scene[data-grade] .shockwave{border-color:rgb(var(--g-rgb2)/.55);box-shadow:0 0 16px rgb(var(--g-rgb)/.28),inset 0 0 15px rgb(var(--g-rgb)/.16)}
+#scene[data-grade] .shockwave:after{border-color:rgb(var(--g-rgb2)/.5)}
+#scene[data-grade] .card-entrance:after{background:linear-gradient(rgb(var(--g-rgb2)/calc(.62*var(--bloom,1))),rgb(var(--g-rgb)/calc(.25*var(--bloom,1))) 45%,transparent)}
+#scene[data-grade] .card-entrance:before{background:radial-gradient(closest-side,rgb(var(--g-rgb2)/calc(.78*var(--bloom,1))),rgb(var(--g-rgb)/calc(.42*var(--bloom,1))) 46%,rgb(var(--g-rgb3)/calc(.14*var(--bloom,1))) 72%,transparent)}
+/* The glare mass the card rises as: tinted by grade (never a near-white flash). SSS keeps the original gold. */
+#scene:is([data-grade=C],[data-grade=B],[data-grade=A],[data-grade=S],[data-grade=SS]) .emerge-glare{
+  background:linear-gradient(112deg,transparent 38%,rgb(var(--g-rgb2)/.85) 50%,transparent 62%) 0 0/260% 100% no-repeat,
+    radial-gradient(ellipse 36% 24% at 50% 36%,rgb(var(--g-rgb)/.32),transparent 72%),
+    radial-gradient(ellipse 38% 9% at 50% 71%,rgb(var(--g-rgb)/.25),transparent 75%),
+    repeating-radial-gradient(circle at 50% 48%,transparent 0 17px,rgb(var(--g-rgb2)/.2) 17px 18px),
+    radial-gradient(ellipse at 50% 48%,rgb(var(--g-rgb2)) 0,rgb(var(--g-rgb2)) 20%,rgb(var(--g-rgb)) 62%,rgb(var(--g-rgb3)) 100%);
+  box-shadow:inset 0 0 0 1.5px rgb(var(--g-rgb2)),inset 0 0 38px 9px rgb(var(--g-rgb)/.75)}
+
+/* ---- 4. Radiance (CSS rays): none for C/B/A (WebGL rays carry them), faint for S, stronger for SS, SSS ---- */
+#scene:is([data-grade=C],[data-grade=B],[data-grade=A]) .radiance{display:none}
+#scene:is([data-grade=S],[data-grade=SS]).releasing .radiance{background:repeating-conic-gradient(from 13deg,transparent 0deg,rgb(var(--g-rgb)/.05) 4deg,transparent 8deg,transparent 17deg,rgb(var(--g-rgb2)/.05) 19deg,transparent 23deg)}
+#scene:is([data-grade=SS],[data-grade=SSS]).releasing .radiance{background:repeating-conic-gradient(from 13deg,transparent 0deg,rgb(var(--g-rgb)/.1) 4deg,transparent 8deg,transparent 17deg,rgb(var(--g-rgb2)/.08) 19deg,transparent 23deg)}
+
+/* ---- 5. Shock rings: the count comes from data-rings (C 0, B 1, A 1, S 2, SS 4, SSS 5) ---- */
+#scene[data-rings="0"] .shockwave{display:none}
+#scene:is([data-rings="0"],[data-rings="1"]) .shockwave:after{display:none}
+#scene:is([data-rings="1"],[data-rings="2"]).unveiling:not(.skipped) .shockwave{animation:shockwave 2.4s cubic-bezier(.1,.5,.1,1) forwards}
+#grade-fx{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden}
+.gfx-vignette,.gfx-prism,.gfx-lens,.gfx-ring{position:absolute;display:none;pointer-events:none}
+.gfx-ring{left:50%;top:47%;width:60px;height:60px;border-radius:50%;opacity:0;transform:translate(-50%,-50%) scale(0);
+  background:radial-gradient(closest-side,transparent 84%,rgb(var(--g-rgb)/.5) 93%,rgb(var(--g-rgb2)/.7) 96%,transparent 100%)}
+#scene[data-rings="4"] .gfx-ring-a,#scene[data-rings="5"] .gfx-ring{display:block}
+#scene.releasing .gfx-ring-a{animation:gfx-ring 2.7s cubic-bezier(.12,.6,.15,1) .1s both}
+/* SSS: an extra rainbow ring rides out with the reveal. */
+.gfx-ring-b{background:conic-gradient(#ff5a78,#ffc850,#5affc8,#78a0ff,#e5a8ff,#ff5a78);-webkit-mask-image:radial-gradient(closest-side,transparent 88%,#000 94%,transparent 100%);mask-image:radial-gradient(closest-side,transparent 88%,#000 94%,transparent 100%)}
+#scene.unveiling:not(.skipped) .gfx-ring-b{animation:gfx-ring-soft 2.6s cubic-bezier(.12,.6,.15,1) .05s both}
+@keyframes gfx-ring{0%{opacity:0;transform:translate(-50%,-50%) scale(.2)}8%{opacity:.9}100%{opacity:0;transform:translate(-50%,-50%) scale(30)}}
+@keyframes gfx-ring-soft{0%{opacity:0;transform:translate(-50%,-50%) scale(.2)}10%{opacity:.5}100%{opacity:0;transform:translate(-50%,-50%) scale(28)}}
+
+/* ---- 6. Lens streak (SS orange, SSS gold) ---- */
+#scene:is([data-grade=SS],[data-grade=SSS]) .gfx-lens{display:block;left:-5%;right:-5%;top:47%;height:3px;opacity:0;transform:translateY(-50%) scaleX(0);
+  background:linear-gradient(90deg,transparent,rgb(var(--g-rgb)/.2) 8%,rgb(var(--g-rgb)/.9) 30%,rgb(var(--g-rgb2)) 50%,rgb(var(--g-rgb)/.9) 70%,rgb(var(--g-rgb)/.2) 92%,transparent);
+  box-shadow:0 0 22px 3px rgb(var(--g-rgb)/.45),0 0 80px 16px rgb(var(--g-rgb3)/.25)}
+#scene[data-grade=SSS] .gfx-lens{height:4px}
+#scene.releasing .gfx-lens{animation:gfx-lens 1.8s ease-out both}
+@keyframes gfx-lens{0%{opacity:0;transform:translateY(-50%) scaleX(.05)}14%{opacity:1;transform:translateY(-50%) scaleX(1)}38%{opacity:.85}100%{opacity:0;transform:translateY(-50%) scaleX(1.06) scaleY(.2)}}
+
+/* ---- 7. SSS prism halo: a soft rainbow wheel that turns a little and rests (finite animation) ---- */
+#scene[data-grade=SSS] .gfx-prism{display:block;left:50%;top:47%;width:min(150vmax,1800px);height:min(150vmax,1800px);translate:-50% -50%;opacity:0;
+  background:conic-gradient(from 0deg,#ff5a78,#ffc850,#5affc8,#78a0ff,#e5a8ff,#ff5a78);
+  -webkit-mask-image:radial-gradient(circle,transparent 5%,#000 11%,#0008 20%,transparent 40%);mask-image:radial-gradient(circle,transparent 5%,#000 11%,#0008 20%,transparent 40%)}
+#scene[data-grade=SSS].releasing .gfx-prism{animation:gfx-prism 6s ease-out both}
+@keyframes gfx-prism{0%{opacity:0;transform:rotate(0)}16%{opacity:.34}100%{opacity:.12;transform:rotate(80deg)}}
+
+/* ---- 8. Darkening while charging (S a little, SS clearly, SSS the most), released at the tear ---- */
+.gfx-vignette{inset:0;opacity:0;background:radial-gradient(ellipse 62% 56% at 50% 50%,transparent 0,transparent 28%,rgb(0 0 0/.92) 100%)}
+#scene.charging .gfx-vignette{display:block;animation:gfx-dark var(--t-charge,1.2s) ease-in forwards}
+#scene.torn:not(.dragged) .gfx-vignette{display:block;animation:gfx-dark-out .9s ease-out forwards}
+@keyframes gfx-dark{from{opacity:0}to{opacity:var(--dark,0)}}
+@keyframes gfx-dark-out{from{opacity:var(--dark,0)}to{opacity:0}}
+
+/* ---- 9. Screen shake at the release (S weak, SS strong, SSS strongest); C/B/A stay still ---- */
+#scene:is([data-grade=S],[data-grade=SS],[data-grade=SSS]).releasing{animation:gfx-shake .55s linear both}
+#scene:is([data-grade=SS],[data-grade=SSS]).releasing{animation-duration:.85s}
+@keyframes gfx-shake{
+  0%{translate:0 0}8%{translate:calc(var(--shake)*-1) calc(var(--shake)*.6)}18%{translate:calc(var(--shake)*.9) calc(var(--shake)*-.7)}
+  30%{translate:calc(var(--shake)*-.7) calc(var(--shake)*-.4)}44%{translate:calc(var(--shake)*.5) calc(var(--shake)*.5)}
+  60%{translate:calc(var(--shake)*-.3) calc(var(--shake)*.2)}80%{translate:calc(var(--shake)*.12) calc(var(--shake)*-.1)}100%{translate:0 0}}
+
+/* ---- 10. Grade banner + NEW tag after the reveal (outside .card-surface, so the rounded clip is untouched) ---- */
+.grade-banner{position:absolute;z-index:9;left:50%;top:calc(50% - 15px - var(--card-width)*.6984 - 14px);translate:-50% -100%;display:none;align-items:center;gap:10px;white-space:nowrap;opacity:0;pointer-events:none;
+  color:rgb(var(--g-rgb2,255 243 207));font:600 11px/1 Arial,'Malgun Gothic',sans-serif;letter-spacing:.3em;
+  text-shadow:0 0 calc(10px*var(--gb-glow,1)) rgb(var(--g-rgb,250 204 110)/.9),0 0 calc(30px*var(--gb-glow,1)) rgb(var(--g-rgb3,224 164 58)/.7)}
+.gb-grade{font-size:var(--gb-size,20px);font-weight:800;letter-spacing:.14em}
+.gb-rule{display:block;width:clamp(16px,6vw,54px);height:1px;background:linear-gradient(90deg,transparent,rgb(var(--g-rgb2,255 243 207)/.9))}
+.gb-rule:last-child{transform:scaleX(-1)}
+#scene[data-grade]:is([data-phase=revealing],[data-phase=revealed]):not(.previewing) .grade-banner{display:flex;animation:gb-show var(--banner-dur,3s) cubic-bezier(.2,.7,.2,1) .15s both}
+@keyframes gb-show{0%{opacity:0;transform:translateY(10px) scale(.94)}12%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0;transform:translateY(-4px)}}
+.card-magnetic[data-new]:after{content:'NEW';position:absolute;left:5.2%;top:20.6%;z-index:3;padding:.3em .65em .26em;font:800 calc(var(--card-width)*.034)/1 Arial,sans-serif;letter-spacing:.14em;color:#1a120a;
+  background:linear-gradient(135deg,rgb(var(--g-rgb2,255 243 207)),rgb(var(--g-rgb,250 204 110)));border-radius:3px;box-shadow:0 0 0 1px rgb(var(--g-rgb2,255 243 207)/.7),0 2px 10px rgb(var(--g-rgb,250 204 110)/.55);
+  transform:translateZ(3px) rotate(-5deg);opacity:0;pointer-events:none}
+#scene:is([data-phase=revealing],[data-phase=revealed]) .card-magnetic[data-new]:after{animation:new-tag-in .5s cubic-bezier(.2,1.4,.3,1) .9s both}
+@keyframes new-tag-in{0%{opacity:0;transform:translateZ(3px) rotate(-5deg) scale(.4)}100%{opacity:1;transform:translateZ(3px) rotate(-5deg) scale(1)}}
+
+/* ---- 11. Skip button: quiet, bottom centre, only while the opening is running ---- */
+.skip-fx{position:absolute;z-index:9;left:50%;bottom:max(25px,env(safe-area-inset-bottom));translate:-50% 0;display:none;opacity:0;font-size:11px}
+#scene:is([data-phase=charging],[data-phase=tearing],[data-phase=opening],[data-phase=emerging],[data-phase=revealing]) .skip-fx{display:inline-flex;animation:hint-in .6s ease .35s forwards}
+/* A skipped opening lands straight on the finished result: no glare mass, no leftover bloom / ring animations. */
+#scene.skipped .emerge-glare{display:none}
+#scene.skipped .card-magnetic,#scene.skipped .light-bloom,#scene.skipped .shockwave,#scene.skipped .shockwave:after{animation:none}
+
+@media(max-width:600px){.gb-rule{width:clamp(14px,5vw,34px)}.grade-banner{gap:8px;letter-spacing:.24em}}
+@media(prefers-reduced-motion:reduce){
+  #grade-fx,.skip-fx,#scene .gfx-vignette{display:none!important}
+  /* Reduced motion: the banner and NEW tag just appear, the banner leaves after a pause (animation-delay survives the 0.01ms rule). */
+  #scene[data-grade]:is([data-phase=revealing],[data-phase=revealed]):not(.previewing) .grade-banner{animation:gb-static 1ms 2.6s both}
+  #scene:is([data-phase=revealing],[data-phase=revealed]) .card-magnetic[data-new]:after{animation-delay:0s}
+  @keyframes gb-static{from{opacity:1}to{opacity:0}}
+}

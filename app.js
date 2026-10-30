@@ -1,6 +1,7 @@
-import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=8';
-import { boxMarkup } from './box3d.js?v=8';
-import { refreshMagnetic, burstLight, resetEffects, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain } from './effects.js?v=8';
+import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=9';
+import { boxMarkup } from './box3d.js?v=9';
+import { refreshMagnetic, burstLight, resetEffects, stopFx, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain } from './effects.js?v=9';
+import './grades.js?v=9';
 
 const $ = (selector) => document.querySelector(selector);
 const scene = $('#scene');
@@ -39,6 +40,7 @@ function syncCounts(pack) {
 }
 for (const pack of PACK_SETS) countsByPack.set(pack.id,readCounts(pack));
 let collectionUnlocked = [...countsByPack.values()].some((counts)=>counts.some((count)=>count>0));
+collectionPackId=(PACK_SETS.find((pack)=>countsByPack.get(pack.id).some((count)=>count>0)) || activePack).id;
 const getCounts = (pack=activePack) => countsByPack.get(pack.id);
 const stable = () => ['bundles','packs','sealed','revealed','collection'].includes(phase);
 
@@ -58,10 +60,27 @@ function later(callback,delay) {
   timers.add(timer);
 }
 function cancelPending() { sequence++;timers.forEach(clearTimeout);timers.clear(); }
-function randomCard(pack=activePack) {
-  const values=new Uint32Array(1),limit=Math.floor(4294967296/pack.cards.length)*pack.cards.length;
+const gradeOf = (card) => card.grade || 'SSS';
+// Grade spectacle presets come from grades.js (globalThis.GradeFX). Without it: SSS look and these SSS timings (ms).
+const SSS_TIMING = {charge:1200,tear:1150,emerge:1600,reveal:1300,settle:1500};
+const timingOf = (grade) => globalThis.GradeFX?.timing(grade) || SSS_TIMING;
+function applyGrade(grade) { const fx=globalThis.GradeFX;if(fx)fx.apply(scene,grade);else scene.setAttribute('data-grade',grade); }
+function clearGrade() { const fx=globalThis.GradeFX;if(fx)fx.clear(scene);else scene.removeAttribute('data-grade'); }
+let live = null; // the draw being opened, once its art is loaded: {card,image,counted,isNew}
+const packGrades = (pack) => [...new Set(pack.cards.map(gradeOf))];
+function randomInt(size) {
+  const values=new Uint32Array(1),limit=Math.floor(4294967296/size)*size;
   do{crypto.getRandomValues(values);}while(values[0]>=limit);
-  return pack.cards[values[0]%pack.cards.length];
+  return values[0]%size;
+}
+// pack.rates 가 있으면 등급을 가중 추첨(0.01 단위)한 뒤 그 등급 카드 중 균등 추첨. 없거나 쓸 수 없는 값이면 팩 전체 균등 추첨.
+function randomCard(pack=activePack) {
+  const tiers=Object.entries(pack.rates||{}).map(([grade,rate])=>[grade,Math.round(Number(rate)*100)||0]).filter(([grade,weight])=>weight>0 && pack.cards.some((card)=>gradeOf(card)===grade));
+  if(!tiers.length)return pack.cards[randomInt(pack.cards.length)];
+  let roll=randomInt(tiers.reduce((sum,[,weight])=>sum+weight,0)),grade=tiers[tiers.length-1][0];
+  for(const [name,weight] of tiers){if(roll<weight){grade=name;break;}roll-=weight;}
+  const pool=pack.cards.filter((card)=>gradeOf(card)===grade);
+  return pool[randomInt(pool.length)];
 }
 function loadCard(card) {
   return new Promise((resolve,reject)=>{
@@ -154,22 +173,37 @@ function buildCard(preview=false) {
   $('#reveal-zone').hidden=false;
 }
 function fillCardFront(card,image) {
-  image.id='revealed-image';image.alt=`${card.name} SSS 카드`;image.width=756;image.height=1056;image.draggable=false;
+  image.id='revealed-image';image.alt=`${card.name} ${gradeOf(card)} 카드`;image.width=756;image.height=1056;image.draggable=false;
   $('#reveal-zone .card-surface').prepend(image);
   selectedCard={packId:activePack.id,card};
-  $('#save-card').href=card.image;$('#save-card').download=`${card.name}_SSS.png`;
+  $('#save-card').href=card.image;$('#save-card').download=`${card.name}_${gradeOf(card)}.png`;
 }
-function revealCard(card,image) {
+function finishReveal(card,isNew) {
+  live=null;
+  setPhase('revealed');setView('result');$('#pack-position').hidden=true;packButton.removeAttribute('aria-busy');
+  syncNavigation();$('#announcement').textContent=`${card.name} ${gradeOf(card)} 카드가 나타났습니다.${isNew?' 처음 만난 카드입니다.':''}`;
+  $('#card-list').focus({preventScroll:true});refreshMagnetic();
+}
+function revealCard(card,image,instant=false) {
   setPhase('revealing');fillCardFront(card,image);scene.classList.add('unveiling');
   const counts=syncCounts(activePack),index=activePack.cards.findIndex((item)=>item.id===card.id),isNew=counts[index]===0;
   counts[index]++;collectionUnlocked=true;
   try{localStorage.setItem(activePack.storageKey,JSON.stringify({version:1,counts}));}catch{/* Download remains available without storage. */}
-  burstLight(.9);playReveal();
-  later(()=>{
-    setPhase('revealed');setView('result');$('#pack-position').hidden=true;packButton.removeAttribute('aria-busy');
-    syncNavigation();$('#announcement').textContent=`${card.name} SSS 카드가 나타났습니다.${isNew?' 처음 만난 카드입니다.':''}`;
-    $('#card-list').focus({preventScroll:true});refreshMagnetic();
-  },reducedMotion.matches?60:1500);
+  if(live){live.counted=true;live.isNew=isNew;}
+  if(isNew)$('#reveal-zone .card-magnetic')?.setAttribute('data-new','');
+  burstLight(instant?.5:.9);playReveal();
+  if(instant)finishReveal(card,isNew);
+  else later(()=>finishReveal(card,isNew),reducedMotion.matches?60:timingOf(gradeOf(card)).settle);
+}
+// Skip: drop whatever is left of the show and land on the finished result. The draw is counted exactly once (revealCard counts it,
+// or it already did when the skip comes during the final unveil); timers, sounds and particles are cleared first.
+function skipOpening() {
+  if(!live || !['charging','tearing','opening','emerging','revealing'].includes(phase))return;
+  const {card,image,counted,isNew}=live;
+  cancelPending();stopFx();scene.classList.remove('charging','dragging');scene.classList.add('skipped');
+  if(counted){finishReveal(card,isNew);return;}
+  if(phase!=='emerging'){setView('result');buildCard();}
+  revealCard(card,image,true);
 }
 function prepareDraw() {
   if(!prepared){const card=randomCard(),load=loadCard(card);load.catch(()=>{});prepared={card,load};}
@@ -189,16 +223,17 @@ async function openPack({dragged=false}={}) {
   try{
     const card=draw.card,image=await draw.load;if(token!==sequence)return;
     $('#pack-position').classList.remove('pack-arriving');
+    const T=timingOf(gradeOf(card));applyGrade(gradeOf(card));live={card,image,counted:false,isNew:false};
     const tear=()=>{
       setPhase('tearing');scene.classList.remove('charging','dragging');scene.classList.add('torn');playRip();burstLight(.18);
-      later(()=>{setPhase('opening');scene.classList.add('releasing');burstLight(1);playImpact();},reducedMotion.matches?30:1150);
+      later(()=>{setPhase('opening');scene.classList.add('releasing');burstLight(1);playImpact();},reducedMotion.matches?30:T.tear);
       later(()=>{
         setPhase('emerging');setView('result');buildCard();playSuspense();playWhoosh();
-        later(()=>revealCard(card,image),reducedMotion.matches?30:1300);
-      },reducedMotion.matches?60:1600);
+        later(()=>revealCard(card,image),reducedMotion.matches?30:T.reveal);
+      },reducedMotion.matches?60:T.emerge);
     };
     if(dragged){scene.classList.add('dragged');tear();}
-    else{setPhase('charging');scene.classList.add('charging');playCharge();refreshMagnetic();later(tear,reducedMotion.matches?20:1200);}
+    else{setPhase('charging');scene.classList.add('charging');playCharge();refreshMagnetic();later(tear,reducedMotion.matches?20:T.charge);}
   }catch{
     if(token!==sequence)return;
     resetTear();setPhase('sealed');packButton.disabled=false;packButton.removeAttribute('aria-busy');syncNavigation();
@@ -250,7 +285,7 @@ function clearStage() {
   $('#pack-position').hidden=true;$('#pack-position').classList.remove('pack-arriving');resetBoxes();
   $('#save-card').removeAttribute('href');$('#save-card').removeAttribute('download');
   $('#announcement').textContent='';$('#message').textContent='';
-  scene.classList.remove('charging','torn','releasing','unveiling','previewing');
+  scene.classList.remove('charging','torn','releasing','unveiling','previewing','skipped');clearGrade();live=null;
   $('#bundle-stage').hidden=true;
   document.querySelectorAll('.bundle-choice').forEach((button)=>button.disabled=false);
   packButton.disabled=false;packButton.removeAttribute('aria-busy');resetEffects();
@@ -283,15 +318,25 @@ function showPacks() {
   $('#pack-list-title').focus({preventScroll:true});
 }
 
+let collectionFilter={pack:'',grade:'all'};
 function renderCollection(pack) {
-  const counts=getCounts(pack),owned=counts.filter((n)=>n>0).length;
+  const counts=getCounts(pack),owned=counts.filter((n)=>n>0).length,grades=packGrades(pack);
+  if(collectionFilter.pack!==pack.id || (collectionFilter.grade!=='all' && !grades.includes(collectionFilter.grade)))collectionFilter={pack:pack.id,grade:'all'};
+  const grade=collectionFilter.grade,chips=$('#grade-chips');
   $('#collection-count').textContent=`${owned} / ${pack.cards.length}`;
   $('#collection-summary').textContent=`${pack.label} · 총 ${counts.reduce((a,b)=>a+b,0).toLocaleString('ko-KR')}장 획득`;
   $('#pack-tabs').innerHTML=PACK_SETS.map((item)=>`<button class="pack-tab" data-collection-pack="${escapeHTML(item.id)}" aria-pressed="${item.id===pack.id}">${escapeHTML(item.label)}</button>`).join('');
+  // 등급이 둘 이상인 팩만 등급 칩(획득/전체)으로 필터한다. 단일 등급 팩은 기존 화면 그대로.
+  chips.hidden=grades.length<2;
+  chips.innerHTML=grades.length<2 ? '' : ['all',...grades].map((name)=>{
+    const inGrade=pack.cards.map((card,index)=>[card,index]).filter(([card])=>name==='all' || gradeOf(card)===name);
+    return `<button class="grade-chip" data-collection-grade="${escapeHTML(name)}" aria-pressed="${name===grade}">${name==='all'?'전체':escapeHTML(name)} <small>${inGrade.filter(([,index])=>counts[index]>0).length}/${inGrade.length}</small></button>`;
+  }).join('');
   $('#collection-grid').innerHTML=pack.cards.map((card,index)=>{
     const count=counts[index];
+    if(grade!=='all' && gradeOf(card)!==grade)return '';
     if(!count)return '<div class="collection-slot locked"><div class="unknown-card" role="img" aria-label="아직 뽑지 않은 카드"><span aria-hidden="true">?</span></div><p class="unknown-label">미발견</p></div>';
-    return `<button class="collection-slot owned" data-owned-card="${card.id}" data-owned-pack="${escapeHTML(pack.id)}" aria-label="${escapeHTML(card.name)}, ${count}장 보유, 크게 보기"><span class="collection-art"><img src="${escapeHTML(card.image)}" alt="${escapeHTML(card.name)} SSS 카드" width="756" height="1056" loading="lazy"></span><span class="collection-card-name">${escapeHTML(card.name)}<small class="owned-qty">× ${count}</small></span></button>`;
+    return `<button class="collection-slot owned" data-owned-card="${card.id}" data-owned-pack="${escapeHTML(pack.id)}" aria-label="${escapeHTML(card.name)}, ${count}장 보유, 크게 보기"><span class="collection-art"><img src="${escapeHTML(card.image)}" alt="${escapeHTML(card.name)} ${escapeHTML(gradeOf(card))} 카드" width="756" height="1056" loading="lazy" decoding="async"></span><span class="collection-card-name">${escapeHTML(card.name)}<small class="owned-qty">× ${count}</small></span></button>`;
   }).join('');
 }
 function showCollection(packId=activePack.id) {
@@ -299,7 +344,7 @@ function showCollection(packId=activePack.id) {
   const pack=PACK_SETS.find((item)=>item.id===packId);if(!pack)return;
   cancelPending();collectionPackId=pack.id;activePack=pack;syncCounts(pack);
   $('#bundle-stage').hidden=true;$('#pack-list').hidden=true;$('#pack-position').hidden=true;$('#reveal-zone').hidden=true;$('#reveal-zone').replaceChildren();
-  scene.classList.remove('charging','torn','releasing','unveiling','previewing');
+  scene.classList.remove('charging','torn','releasing','unveiling','previewing','skipped');clearGrade();live=null;
   setPhase('collection');setView('collection');resetEffects();renderCollection(pack);
   $('#collection-panel').hidden=false;$('#collection-panel').scrollTop=0;$('#message').textContent='';syncNavigation();
   $('#collection-title').focus({preventScroll:true});refreshMagnetic();
@@ -312,10 +357,10 @@ async function inspectOwnedCard(packId,cardId) {
   setPhase('inspecting');$('#collection-grid').setAttribute('aria-busy','true');syncNavigation();
   try{
     const image=await loadCard(card);if(token!==sequence)return;
-    activePack=pack;buildCard(true);fillCardFront(card,image);scene.classList.add('previewing');
+    activePack=pack;applyGrade(gradeOf(card));buildCard(true);fillCardFront(card,image);scene.classList.add('previewing');
     $('#collection-panel').hidden=true;$('#collection-grid').replaceChildren();
     setPhase('revealed');setView('result');syncNavigation();refreshMagnetic();
-    $('#announcement').textContent=`${card.name} SSS 카드, ${getCounts(pack)[index]}장 보유.`;$('#card-list').focus({preventScroll:true});
+    $('#announcement').textContent=`${card.name} ${gradeOf(card)} 카드, ${getCounts(pack)[index]}장 보유.`;$('#card-list').focus({preventScroll:true});
   }catch{
     if(token!==sequence)return;setPhase('collection');syncNavigation();$('#message').textContent='카드를 불러오지 못했어요. 다시 눌러주세요.';
   }finally{$('#collection-grid').removeAttribute('aria-busy');}
@@ -330,5 +375,13 @@ $('#pack-grid').addEventListener('click',(event)=>{const button=event.target.clo
 $('#card-list').addEventListener('click',()=>showCollection(collectionPackId));
 $('#save-card').addEventListener('click',()=>{$('#message').textContent='카드를 저장했어요.';later(()=>{$('#message').textContent='';},2400);});
 $('#pack-tabs').addEventListener('click',(event)=>{const button=event.target.closest('[data-collection-pack]');if(button)showCollection(button.dataset.collectionPack);});
+$('#grade-chips').addEventListener('click',(event)=>{
+  const button=event.target.closest('[data-collection-grade]'),pack=PACK_SETS.find((item)=>item.id===collectionFilter.pack);
+  if(!button || !pack || phase!=='collection')return;
+  collectionFilter.grade=button.dataset.collectionGrade;renderCollection(pack);
+  $('#grade-chips [aria-pressed=true]')?.focus({preventScroll:true});
+});
 $('#collection-grid').addEventListener('click',(event)=>{const button=event.target.closest('[data-owned-card]');if(button)inspectOwnedCard(button.dataset.ownedPack,button.dataset.ownedCard);});
+$('#skip-fx')?.addEventListener('click',skipOpening);
+document.addEventListener('keydown',(event)=>{if(event.key==='Escape')skipOpening();});
 renderBundles();syncNavigation();

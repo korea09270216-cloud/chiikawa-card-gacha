@@ -1,15 +1,33 @@
 /* ---------- Card shine (overrides the card block in box3d.css; loaded after it) ---------- */
-/* One wide, soft, warm-gold band crosses the card now and then, then rests. Peak alpha is roughly half of the old
-   cream-white band so art and the cream description panel keep their colour. The band lives in .card-surface,
-   which clips it to the rounded card. Pointer coordinates are never used. */
+/* One wide, soft band crosses the card now and then, then rests. Peak alpha is --shine-a (never above .36, so art and the cream
+   description panel keep their colour). The band lives in .card-surface, which clips it to the rounded card. Pointer coordinates
+   are never used. grades.js sets --shine-rgb / --shine-a / --shine-dur / --foil-a on #scene per grade:
+   C silver-white, rare and calm -> SSS gold with a thin chasing band and a rainbow hologram foil, frequent and rich.
+   Without a grade the values below are the original SSS gold. */
 .card-surface .specular:before{
   width:52%;mix-blend-mode:screen;
   background:linear-gradient(100deg,
-    transparent 0,#ffd98a0a 14%,#ffd98a26 32%,#ffe0a05c 50%,#ffd98a26 68%,#ffd98a0a 86%,transparent 100%);
+    transparent 0,rgb(var(--shine-rgb,255 217 138)/calc(var(--shine-a,.36)*.11)) 14%,rgb(var(--shine-rgb,255 217 138)/calc(var(--shine-a,.36)*.42)) 32%,
+    rgb(var(--shine-rgb,255 217 138)/var(--shine-a,.36)) 50%,rgb(var(--shine-rgb,255 217 138)/calc(var(--shine-a,.36)*.42)) 68%,
+    rgb(var(--shine-rgb,255 217 138)/calc(var(--shine-a,.36)*.11)) 86%,transparent 100%);
   transform:translateX(-200%) skewX(-18deg)}
-#scene[data-phase=revealed] .card-surface .specular:before{animation:card-shine-pass 5.5s ease-in-out .7s infinite}
+#scene[data-phase=revealed] .card-surface .specular:before{animation:card-shine-pass var(--shine-dur,5.5s) ease-in-out .7s infinite}
 @keyframes card-shine-pass{0%{transform:translateX(-200%) skewX(-18deg)}26%,100%{transform:translateX(300%) skewX(-18deg)}}
-.card-surface .foil{opacity:.055}
+
+/* S, SS, SSS: a second, thin band trails the first one. */
+.card-surface .specular:after{content:'';position:absolute;top:-10%;left:0;width:13%;height:120%;display:none;mix-blend-mode:screen;
+  background:linear-gradient(100deg,transparent,rgb(var(--shine-rgb,255 217 138)/calc(var(--shine-a,.36)*.7)),transparent);
+  transform:translateX(-850%) skewX(-18deg)}
+#scene:is([data-grade=S],[data-grade=SS],[data-grade=SSS]) .card-surface .specular:after{display:block}
+#scene[data-phase=revealed] .card-surface .specular:after{animation:card-shine-trail var(--shine-dur,5.5s) ease-in-out .85s infinite}
+@keyframes card-shine-trail{0%{transform:translateX(-850%) skewX(-18deg)}26%,100%{transform:translateX(1250%) skewX(-18deg)}}
+
+/* Hologram foil: none on C, then a cool / rose / violet / orange tint, and the full rainbow (box3d.css default) on SSS. */
+.card-surface .foil{opacity:var(--foil-a,.055)}
+#scene[data-grade=B] .card-surface .foil{background-image:repeating-linear-gradient(115deg,transparent 0,#8fd0ff 15%,#eaf6ff 25%,#8fd0ff 35%,transparent 50%)}
+#scene[data-grade=A] .card-surface .foil{background-image:repeating-linear-gradient(115deg,transparent 0,#ff9aa4 15%,#ffe3c8 25%,#ff7c8e 35%,transparent 50%)}
+#scene[data-grade=S] .card-surface .foil{background-image:repeating-linear-gradient(115deg,transparent 0,#a98bff 15%,#e8dcff 25%,#7fe8ff 35%,transparent 50%)}
+#scene[data-grade=SS] .card-surface .foil{background-image:repeating-linear-gradient(115deg,transparent 0,#ff9c4a 15%,#ffe2b8 25%,#ff6f8a 35%,transparent 50%)}
 
 @media(prefers-reduced-motion:reduce){
   .card-surface .specular{display:none}
