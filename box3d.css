@@ -2,7 +2,7 @@
 
 /* ---------- Bundle box: a real CSS cuboid ---------- */
 /* Face proportions come from the rectified render: front 720x1046, depth 352 (W : H : D = 1 : 1.4528 : .4889). */
-.bundle-choice{--bw:min(300px,60vw,42svh);--bh:calc(var(--bw)*1.4528);--bd:calc(var(--bw)*.4889);width:calc(var(--bw)*1.25)}
+.bundle-choice{--bw:min(300px,60vw,42vh);--bh:calc(var(--bw)*1.4528);--bd:calc(var(--bw)*.4889);width:calc(var(--bw)*1.25)}
 .bundle-float{display:flex;justify-content:center}
 /* effects.js rewrites this element's inline transform every frame; perspective() is the fallback
    for the frames it does not run (reduced motion, hidden tab). Its filter would flatten the 3D chain. */
@@ -12,29 +12,83 @@
 .box3d{position:absolute;inset:0;display:block;transform-style:preserve-3d;transform:rotateX(-18deg) rotateY(25deg);animation:box3d-sway 9s ease-in-out infinite;will-change:transform}
 .bx-face{position:absolute;display:block;backface-visibility:hidden;-webkit-backface-visibility:hidden;background-size:100% 100%;background-repeat:no-repeat;background-color:#07060d;overflow:hidden}
 /* Every face overlaps its neighbours by .5px so seams never show a hairline gap. */
-.bx-front,.bx-back{left:-.5px;top:-.5px;width:calc(var(--bw) + 1px);height:calc(var(--bh) + 1px)}
-.bx-left,.bx-right{left:calc(50% - var(--bd)/2 - .5px);top:-.5px;width:calc(var(--bd) + 1px);height:calc(var(--bh) + 1px)}
-.bx-top,.bx-bottom{left:-.5px;top:calc(50% - var(--bd)/2 - .5px);width:calc(var(--bw) + 1px);height:calc(var(--bd) + 1px)}
+.bx-front,.bx-back,.bx-in-back{left:-.5px;top:-.5px;width:calc(var(--bw) + 1px);height:calc(var(--bh) + 1px)}
+.bx-left,.bx-right,.bx-in-left,.bx-in-right{left:calc(50% - var(--bd)/2 - .5px);top:-.5px;width:calc(var(--bd) + 1px);height:calc(var(--bh) + 1px)}
+.bx-top,.bx-bottom,.bx-lid-in,.bx-in-floor{left:-.5px;top:calc(50% - var(--bd)/2 - .5px);width:calc(var(--bw) + 1px);height:calc(var(--bd) + 1px)}
 .bx-front{transform:translateZ(calc(var(--bd)/2));background-image:linear-gradient(120deg,#0000 55%,#0006),var(--bx-front,url(assets/box-front.webp));box-shadow:inset 1.5px 1.5px 0 #ffe9b957,inset -1px -1px 0 #edce8728}
 .bx-back{transform:rotateY(180deg) translateZ(calc(var(--bd)/2));background-image:var(--bx-back,linear-gradient(#10101c,#07060d))}
 /* Fixed light from the upper left: the left side falls into shadow, the top catches a little light. */
 .bx-left{transform:rotateY(-90deg) translateZ(calc(var(--bw)/2));background-image:linear-gradient(90deg,#02020acc,#02020a70),var(--bx-left,url(assets/box-left.webp));box-shadow:inset 1px 0 0 #edce8733,inset 0 1px 0 #ffe9b940}
 .bx-right{transform:rotateY(90deg) translateZ(calc(var(--bw)/2));background-image:linear-gradient(90deg,#02020a99,#02020ae6),var(--bx-right,url(assets/box-right.webp))}
-.bx-top{transform:rotateX(90deg) translateZ(calc(var(--bh)/2));background-image:linear-gradient(0deg,#0000,#02020a73),var(--bx-top,url(assets/box-top.webp));box-shadow:inset 0 -1.5px 0 #ffe9b96b,inset 1px 0 0 #edce8740}
+.bx-top{transform:translateZ(calc(var(--bd)/2)) rotateX(90deg);background-image:linear-gradient(0deg,#0000,#02020a73),var(--bx-top,url(assets/box-top.webp));box-shadow:inset 0 -1.5px 0 #ffe9b96b,inset 1px 0 0 #edce8740}
 .bx-bottom{transform:rotateX(-90deg) translateZ(calc(var(--bh)/2));background-image:linear-gradient(#0a0914,#050409)}
 
-/* Cellophane sheen on the front: a wide faint wash + a thin warm core on a fixed light. effects.js drives
-   --reflection-x from the box orientation; the sway keyframes move it on touch devices. */
+/* Cellophane sheen on the front: a faint warm-gold wash + a thin core on a fixed light (alpha kept low so it never reads white).
+   effects.js drives --reflection-x from the box orientation; the sway keyframes move it on touch devices. */
 .bx-gloss{position:absolute;inset:0;display:block;pointer-events:none;mix-blend-mode:screen;translate:calc((var(--reflection-x,50%) - 50%)*.42) 0;animation:box3d-glint 9s ease-in-out infinite;
   background:
-    linear-gradient(104deg,transparent 47.2%,#ffd99633 48.8%,#fff0cd47 50%,#ffd99633 51.2%,transparent 52.8%),
-    linear-gradient(104deg,transparent 22%,#ffd89610 38%,#ffe4ae26 50%,#ffd89610 62%,transparent 78%)}
+    linear-gradient(104deg,transparent 47.2%,#ffd98a14 48.8%,#ffd98a24 50%,#ffd98a14 51.2%,transparent 52.8%),
+    linear-gradient(104deg,transparent 22%,#ffd98a08 38%,#ffd98a12 50%,#ffd98a08 62%,transparent 78%)}
+/* One thick soft band that sweeps across the front now and then, then rests (same rhythm as the card). It lives in
+   .bx-front, whose overflow:hidden clips it to the face. */
+.bx-shine{position:absolute;top:-10%;left:0;width:50%;height:120%;display:block;pointer-events:none;mix-blend-mode:screen;
+  background:linear-gradient(100deg,transparent 0,#ffd98a22 18%,#ffd98a59 50%,#ffd98a22 82%,transparent 100%);
+  transform:translateX(-240%) skewX(-18deg);animation:bx-shine-pass 5.5s ease-in-out 1.2s infinite}
+@keyframes bx-shine-pass{0%{transform:translateX(-240%) skewX(-18deg)}22%,100%{transform:translateX(360%) skewX(-18deg)}}
 
 /* Contact shadow / underglow behind the box (a filter would flatten the 3D chain, so it's a plain gradient). */
 .bx-floor{position:absolute;left:50%;bottom:calc(var(--bw)*-.2);width:calc(var(--bw)*1.35);height:calc(var(--bw)*.3);transform:translate3d(-50%,0,calc(var(--bd)*-.7));pointer-events:none;background:radial-gradient(ellipse at 50% 45%,#000 0 30%,#5a46a72e 52%,#0000 72%)}
 
 @keyframes box3d-sway{0%,100%{transform:rotateX(-18deg) rotateY(19deg)}50%{transform:rotateX(-16deg) rotateY(31deg)}}
 @keyframes box3d-glint{0%,100%{transform:translateX(-30%)}50%{transform:translateX(30%)}}
+
+/* ---------- Opening: lid swings up, the pack rises out, the box sinks away ---------- */
+/* Timeline from the click (ms): pose turn 0-600 | lid 80-700 | pack rise 380-1280 | box sinks 300-1750 | fade 1150-1750.
+   app.js hands the pack over to #pack-position at 1280 and finishes at 1850; keep them in sync. */
+.bundle-choice{--pw:calc(var(--bw)*.68)}
+.bx-rig{position:absolute;inset:0;display:block;transform-style:preserve-3d}
+/* Hinge on the back-top edge: .bx-lid sits on that edge and rotates; .bx-top lies on the lid's far side of the hinge. */
+.bx-lid{position:absolute;left:0;top:0;width:100%;height:0;display:block;transform-style:preserve-3d;transform-origin:50% 0;transform:translateZ(calc(var(--bd)*-.5))}
+.bx-lid-in{transform:translate3d(0,.5px,calc(var(--bd)/2)) rotateX(-90deg);background-image:linear-gradient(#241a0c,#0a0810);box-shadow:inset 0 0 0 1px #edce8738}
+/* Inside of the walls (the outer faces hide their backs): warm near the opening, black at the bottom. */
+.bx-in-back{transform:translateZ(calc(var(--bd)*-.5 + 1px));background-image:linear-gradient(#3b2b13,#140e09 34%,#050409)}
+.bx-in-left{transform:rotateY(90deg) translateZ(calc(var(--bw)*-.5 + 1px));background-image:linear-gradient(#2e2210,#0d0a08 40%,#040308)}
+.bx-in-right{transform:rotateY(-90deg) translateZ(calc(var(--bw)*-.5 + 1px));background-image:linear-gradient(#34260f,#100b08 40%,#040308)}
+.bx-in-floor{transform:rotateX(90deg) translateZ(calc(var(--bh)*-.5 + 1px));background-image:radial-gradient(ellipse at 50% 50%,#1b140b,#050409 80%)}
+/* Soft gold light leaking out of the opening: a pool on the rim and a faint shaft behind the pack. */
+.bx-glow,.bx-shaft{position:absolute;display:block;pointer-events:none;opacity:0;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.bx-glow{left:-.5px;top:calc(50% - var(--bd)/2);width:calc(var(--bw) + 1px);height:var(--bd);transform:rotateX(90deg) translateZ(calc(var(--bh)/2 - 2px));background:radial-gradient(ellipse at 50% 50%,#ffd98acc,#ffc46a66 36%,#0000 70%)}
+.bx-shaft{left:calc(50% - var(--bw)*.36);top:calc(var(--bh)*-.85);width:calc(var(--bw)*.72);height:calc(var(--bh)*.85);transform:translateZ(calc(var(--bd)*-.3));background:radial-gradient(ellipse 62% 100% at 50% 100%,#ffd98a59,#ffd98a14 55%,#0000 82%)}
+/* The foil pack standing inside the box (a flat plane; walls and front hide it until it rises past the rim). */
+.bx-pack{position:absolute;display:block;width:var(--pw);height:calc(var(--pw)*1.75);left:calc(50% - var(--pw)/2);top:calc(100% - var(--pw)*1.75 - var(--bw)*.04);
+  background:var(--bx-pack) center / 100% 100% no-repeat;backface-visibility:hidden;-webkit-backface-visibility:hidden;visibility:hidden}
+
+.bundle-choice.is-opening{animation:bx-fade .6s ease-in 1.15s both}
+.bundle-choice.is-opening .box3d{animation:none}
+.bundle-choice.is-opening .bx-lid{animation:bx-lid-open .62s cubic-bezier(.3,.7,.3,1) .08s both}
+.bundle-choice.is-opening .bx-pack{visibility:visible;animation:bx-pack-rise .9s cubic-bezier(.16,.84,.3,1) .38s both}
+.bundle-choice.is-opening .bx-glow{animation:bx-glow-pulse 1.5s ease-out .12s both}
+.bundle-choice.is-opening .bx-shaft{animation:bx-shaft-pulse 1.5s ease-out .3s both}
+.bundle-choice.is-opening .bx-rig{animation:bx-rig-sink 1.45s cubic-bezier(.3,.6,.4,1) .3s both}
+.bundle-choice.is-opening .bx-floor,.bundle-choice.is-opening .bx-shine,.bundle-choice.is-opening .bundle-label{animation:bx-fade .5s ease-in .5s both}
+#bundle-stage.opening{overflow:hidden}
+#bundle-stage.opening .bundle-choice:not(.is-opening){opacity:0;transition:opacity .5s;pointer-events:none}
+
+/* The real #pack-position is shown, unclickable and without its float / drop shadow while the box opens (opacity .01 (so it is rasterised and decoded) until the
+   hand-over, so the image is already decoded); the shadow fades in when .pack-landing ends and the float then starts at rest. */
+#pack-position.pack-prime{opacity:.01;transition:none;pointer-events:none}
+#pack-position.pack-landing{transition:none;pointer-events:none}
+#pack-position.pack-prime .pack-float,#pack-position.pack-landing .pack-float{animation:none}
+#pack-position.pack-prime .pack-tilt,#pack-position.pack-landing .pack-tilt{filter:drop-shadow(0 0 0 #0000)}
+
+/* Net rotation of the pack is 0 once the box has turned to its opening pose: pitch -26deg (JS animates .box3d there)
+   and the bundle's -2deg base roll are cancelled by rotateX(26deg) rotateZ(2deg) on the pack. */
+@keyframes bx-lid-open{from{transform:translateZ(calc(var(--bd)*-.5)) rotateX(0deg)}62%{transform:translateZ(calc(var(--bd)*-.5)) rotateX(126deg)}to{transform:translateZ(calc(var(--bd)*-.5)) rotateX(116deg)}}
+@keyframes bx-pack-rise{from{transform:translate3d(0,0,0) rotateX(0deg) rotateZ(0deg)}to{transform:translate3d(0,calc(var(--bw)*-1.38),0) rotateX(26deg) rotateZ(2deg)}}
+@keyframes bx-rig-sink{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,calc(var(--bh)*.66),calc(var(--bw)*-.7))}}
+@keyframes bx-glow-pulse{0%{opacity:0}30%{opacity:.8}100%{opacity:0}}
+@keyframes bx-shaft-pulse{0%{opacity:0}35%{opacity:.9}100%{opacity:0}}
+@keyframes bx-fade{to{opacity:0}}
 
 /* ---------- Card: one thick shine that sweeps through now and then ---------- */
 /* After the reveal a single soft diagonal band crosses the card, then rests (gsap.md §11 shine, CSS keyframes).
@@ -52,3 +106,7 @@
   .box3d,.bx-gloss{animation:none}
   .card-surface .specular{display:none}
 }
+@media(prefers-reduced-motion:reduce){
+  .bx-shine{display:none}
+}
+@supports(height:1svh){.bundle-choice{--bw:min(300px,60vw,42svh)}}

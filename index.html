@@ -8,9 +8,10 @@
   <title>CHIIKAWA — SECRET PACK</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23000'/%3E%3Cpath d='M32 8 38 26 56 32 38 38 32 56 26 38 8 32 26 26Z' fill='%23e7ca82'/%3E%3C/svg%3E">
   <link rel="preload" href="assets/box-front.webp" as="image">
-  <link rel="stylesheet" href="styles.css?v=5">
-  <link rel="stylesheet" href="box3d.css?v=5">
-  <script src="app.js?v=5" type="module"></script>
+  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="box3d.css?v=8">
+  <link rel="stylesheet" href="card-shine.css?v=8">
+  <script src="app.js?v=8" type="module"></script>
 </head>
 <body>
   <main id="scene" data-phase="bundles" data-view="bundles" aria-label="우주 속 카드 꾸러미와 카드팩">
@@ -55,7 +56,9 @@
       <button id="next-pack" class="quiet-button">카드뽑기 <span aria-hidden="true">↻</span></button>
       <a id="save-card" class="quiet-button" download hidden>카드 저장 <span aria-hidden="true">↓</span></a>
     </div>
-    <p id="pack-instruction" class="sr-only">클릭하거나 Enter 키를 누르면 팩이 뜯어지고 카드 한 장이 나타납니다.</p>
+    <p id="hint-bundle" class="hint" aria-hidden="true">꾸러미를 눌러 열어보세요</p>
+    <p id="hint-pack" class="hint" aria-hidden="true">팩을 누르거나, 윗부분을 옆으로 밀어 뜯어보세요</p>
+    <p id="pack-instruction" class="sr-only">클릭하거나 Enter 키를 누르거나 팩 윗부분을 옆으로 드래그하면 팩이 뜯어지고 카드 한 장이 나타납니다.</p>
     <p id="announcement" class="sr-only" role="status" aria-live="polite"></p>
     <p id="message" role="status" aria-live="polite"></p>
   </main>

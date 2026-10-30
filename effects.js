@@ -60,6 +60,7 @@ window.addEventListener('pointermove',(event)=>{if(event.pointerType!=='touch')p
 window.addEventListener('blur',settle);
 window.addEventListener('scroll',settle,{passive:true});
 document.addEventListener('mouseleave',settle);
+document.addEventListener('mouseout',(event)=>{if(!event.relatedTarget)settle();});
 finePointer.addEventListener('change',()=>{settle();startMotion();});
 
 // Only cosmetic particles use Math.random. Card selection uses crypto in app.js.
@@ -68,10 +69,10 @@ export function burstLight(power=1){
   if(reduceMotion.matches)return;
   const rect=document.querySelector('#pack-position').getBoundingClientRect();
   const x=innerWidth/2,y=power<.4?rect.top+rect.height*.106:innerHeight*.47;
-  const count=Math.round(70*power);
+  const count=Math.round(110*power);
   for(let i=0;i<count;i++){
     const angle=Math.random()*Math.PI*2,speed=50+Math.random()*300*power;
-    particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,born:burstAt,life:1700+Math.random()*1700,size:.7+Math.random()*1.5});
+    particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,born:burstAt,life:1700+Math.random()*1700,size:.8+Math.random()*(power>.4?2.4:1.5),white:Math.random()<.3});
   }
 }
 export function resetEffects(){burstAt=-10000;burstPower=0;particles=[];settle();}
@@ -115,7 +116,7 @@ function createRayRenderer(){
   canvas.addEventListener('webglcontextlost',(event)=>{event.preventDefault();lost=true;});
   return {
     resize(width,height){const scale=Math.min(1,850/width);canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);gl.viewport(0,0,canvas.width,canvas.height);gl.uniform2f(resolution,canvas.width,canvas.height);},
-    render(time,power){if(lost)return;if(power===0&&lastPower===0)return;lastPower=power;gl.uniform1f(timeUniform,time/1000);gl.uniform1f(powerUniform,power);gl.drawArrays(gl.TRIANGLES,0,6);}
+    render(time,power){if(lost)return;if(power===0&&lastPower===0)return;lastPower=power;gl.uniform1f(timeUniform,(time/1000)%1200);gl.uniform1f(powerUniform,power);gl.drawArrays(gl.TRIANGLES,0,6);}
   };
 }
 
@@ -145,7 +146,7 @@ function createSpace(){
       for(const p of particles){
         const seconds=(time-p.born)/1000,alpha=Math.max(0,1-(time-p.born)/p.life);
         const x=p.x+p.vx*seconds,y=p.y+p.vy*seconds+seconds*seconds*12;
-        ctx.fillStyle=`rgba(255,218,151,${alpha*.85})`;ctx.shadowColor='#ffd282';ctx.shadowBlur=6;
+        ctx.fillStyle=p.white?`rgba(255,250,235,${alpha*.95})`:`rgba(255,218,151,${alpha*.85})`;ctx.shadowColor='#ffd282';ctx.shadowBlur=p.size>2?10:6;
         ctx.fillRect(x,y,p.size,p.size);ctx.shadowBlur=0;
       }
     }
@@ -190,7 +191,10 @@ export function playReveal(){
 
 export function playCharge(){
   const ac=getAudio();if(!ac)return;
-  try{const osc=ac.createOscillator(),gain=ac.createGain(),at=ac.currentTime;osc.type='triangle';osc.frequency.setValueAtTime(65,at);osc.frequency.exponentialRampToValueAtTime(210,at+.9);gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.045,at+.65);gain.gain.exponentialRampToValueAtTime(.001,at+.95);osc.connect(gain).connect(ac.destination);osc.start();osc.stop(at+1);}catch{}
+  try{
+    const osc=ac.createOscillator(),gain=ac.createGain(),at=ac.currentTime;osc.type='triangle';osc.frequency.setValueAtTime(60,at);osc.frequency.exponentialRampToValueAtTime(260,at+1.15);gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.055,at+1.05);gain.gain.exponentialRampToValueAtTime(.001,at+1.25);osc.connect(gain).connect(ac.destination);osc.start();osc.stop(at+1.3);
+    const rumble=ac.createOscillator(),rgain=ac.createGain();rumble.type='sine';rumble.frequency.setValueAtTime(38,at);rumble.frequency.linearRampToValueAtTime(70,at+1.2);rgain.gain.setValueAtTime(0,at);rgain.gain.linearRampToValueAtTime(.08,at+1.1);rgain.gain.exponentialRampToValueAtTime(.001,at+1.3);rumble.connect(rgain).connect(ac.destination);rumble.start();rumble.stop(at+1.35);
+  }catch{}
 }
 export function playImpact(){
   const ac=getAudio();if(!ac)return;
@@ -203,4 +207,28 @@ export function playImpact(){
 export function playSuspense(){
   const ac=getAudio();if(!ac)return;
   try{[1174.66,1567.98].forEach((frequency,i)=>{const at=ac.currentTime,osc=ac.createOscillator(),gain=ac.createGain();osc.type='sine';osc.frequency.setValueAtTime(frequency,at);osc.frequency.linearRampToValueAtTime(frequency+6,at+2.2);gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(i?.012:.025,at+.15);gain.gain.exponentialRampToValueAtTime(.0001,at+2.6);osc.connect(gain).connect(ac.destination);osc.start();osc.stop(at+2.65);});}catch{}
+}
+export function playWhoosh(){
+  const ac=getAudio();if(!ac)return;
+  try{
+    const at=ac.currentTime,length=Math.round(ac.sampleRate*.9),buffer=ac.createBuffer(1,length,ac.sampleRate),data=buffer.getChannelData(0);
+    for(let i=0;i<length;i++)data[i]=Math.random()*2-1;
+    const source=ac.createBufferSource(),filter=ac.createBiquadFilter(),gain=ac.createGain();
+    source.buffer=buffer;filter.type='bandpass';filter.Q.value=1.2;filter.frequency.setValueAtTime(250,at);filter.frequency.exponentialRampToValueAtTime(3200,at+.8);
+    gain.gain.setValueAtTime(0,at);gain.gain.linearRampToValueAtTime(.09,at+.35);gain.gain.exponentialRampToValueAtTime(.001,at+.9);
+    source.connect(filter).connect(gain).connect(ac.destination);source.start();source.stop(at+.92);
+  }catch{}
+}
+// A short paper-tear grain per drag step; louder the further the tear advanced.
+let lastGrain=0;
+export function playTearGrain(progress){
+  const ac=getAudio();if(!ac)return;
+  const now=performance.now();if(now-lastGrain<55)return;lastGrain=now;
+  try{
+    const at=ac.currentTime,length=Math.round(ac.sampleRate*.06),buffer=ac.createBuffer(1,length,ac.sampleRate),data=buffer.getChannelData(0);
+    for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*(1-i/length);
+    const source=ac.createBufferSource(),filter=ac.createBiquadFilter(),gain=ac.createGain();
+    source.buffer=buffer;filter.type='bandpass';filter.frequency.value=1800+progress*2600;filter.Q.value=.8;gain.gain.value=.05+progress*.05;
+    source.connect(filter).connect(gain).connect(ac.destination);source.start();
+  }catch{}
 }

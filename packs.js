@@ -6,8 +6,8 @@ export const PACK_SETS = [
     label: '시크릿 팩',
     brand: 'CHIIKAWA',
     edition: 'SECRET PACK',
-    boxImage: 'assets/secret-box.png',
-    wrapperImage: 'assets/secret-pack.png',
+    boxImage: 'assets/secret-box.webp',
+    wrapperImage: 'assets/secret-pack.webp',
     storageKey: 'chiikawa-awakening-v1',
     cards: [
       {id:1,name:'치이카와',image:'assets/cards/card-01.png'},

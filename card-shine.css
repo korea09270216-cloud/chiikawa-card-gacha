@@ -1,0 +1,16 @@
+/* ---------- Card shine (overrides the card block in box3d.css; loaded after it) ---------- */
+/* One wide, soft, warm-gold band crosses the card now and then, then rests. Peak alpha is roughly half of the old
+   cream-white band so art and the cream description panel keep their colour. The band lives in .card-surface,
+   which clips it to the rounded card. Pointer coordinates are never used. */
+.card-surface .specular:before{
+  width:52%;mix-blend-mode:screen;
+  background:linear-gradient(100deg,
+    transparent 0,#ffd98a0a 14%,#ffd98a26 32%,#ffe0a05c 50%,#ffd98a26 68%,#ffd98a0a 86%,transparent 100%);
+  transform:translateX(-200%) skewX(-18deg)}
+#scene[data-phase=revealed] .card-surface .specular:before{animation:card-shine-pass 5.5s ease-in-out .7s infinite}
+@keyframes card-shine-pass{0%{transform:translateX(-200%) skewX(-18deg)}26%,100%{transform:translateX(300%) skewX(-18deg)}}
+.card-surface .foil{opacity:.055}
+
+@media(prefers-reduced-motion:reduce){
+  .card-surface .specular{display:none}
+}
