@@ -7,11 +7,9 @@
 //   없으면 pools[fallbackPools[등급]]. (규칙에 pool 대신 lines:[...] 를 바로 적어도 된다.)
 // <titles-data> (아래 세 상수는 기획 데이터(titles_spec.json)에서 생성됨)
 export const TITLE_UI = {
-  "toastEyebrow": "TITLE UNLOCKED",
   "toastHeader": "칭호 획득!",
   "toastLine": "새로운 칭호 [ {name} ] 를 획득했습니다!",
-  "toastClose": "확인",
-  "toastGoList": "칭호 목록 보기",
+  "toastGoList": "칭호 목록 ›",
   "listTitle": "칭호 목록",
   "listCount": "획득 {n} / {total}",
   "lockedLabel": "미획득",

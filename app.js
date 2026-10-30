@@ -1,9 +1,9 @@
-import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=12';
-import { boxMarkup } from './box3d.js?v=12';
-import { refreshMagnetic, burstLight, resetEffects, stopFx, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain, playTitle } from './effects.js?v=12';
-import './grades.js?v=12';
-import { TITLES, TITLE_UI, QUIPS, titleMet, pickQuip, cleanTitleStats, nextTitleStats, emptyTitleStats } from './titles.js?v=12';
-import { encodeSave, decodeSave, mergeSnapshots, sanitizeSnapshot, summarize, diffSnapshots, foreignPacks } from './backup.js?v=12';
+import { PACK_SETS, UPCOMING_PACKS } from './packs.js?v=15';
+import { boxMarkup } from './box3d.js?v=15';
+import { refreshMagnetic, burstLight, resetEffects, stopFx, playCharge, playRip, playImpact, playSuspense, playReveal, playWhoosh, playTearGrain, playTitle } from './effects.js?v=15';
+import './grades.js?v=15';
+import { TITLES, TITLE_UI, QUIPS, titleMet, pickQuip, cleanTitleStats, nextTitleStats, emptyTitleStats } from './titles.js?v=15';
+import { encodeSave, decodeSave, mergeSnapshots, sanitizeSnapshot, summarize, diffSnapshots, foreignPacks } from './backup.js?v=15';
 
 const $ = (selector) => document.querySelector(selector);
 // Keyboard modality flag: the focus ring only shows while the keyboard is in use (see styles.css).
@@ -233,11 +233,12 @@ function fillCardFront(card,image) {
 }
 // ---- 칭호: 저장(chiikawa-titles-v1) · 판정(titles.js) · 획득 팝업 · 목록 ----
 // 저장: {version:1,earned:{[id]:획득 시각(ms)},stats:{...}}. 읽기/쓰기는 항상 try/catch, 값은 검증하고, 다른 탭의 기록과는 합쳐서(earned 합집합) 덮어쓰지 않는다.
-const TITLE_KEY='chiikawa-titles-v1',TITLE_TIERS=['common','rare','epic','legend'],toast=$('#title-toast'),toastPanel=toast.querySelector('.tt-panel');
-const UI_DEFAULT={toastEyebrow:'TITLE UNLOCKED',toastHeader:'칭호 획득!',toastLine:'새로운 칭호 [ {name} ] 를 획득했습니다!',toastClose:'확인',toastGoList:'칭호 목록 보기',listTitle:'칭호 목록',listCount:'획득 {n} / {total}',lockedLabel:'미획득',lockedHiddenName:'???',titleListSubtitle:'',tabCards:'카드 목록',tabTitles:'칭호 목록',tierLabels:{common:'COMMON',rare:'RARE',epic:'EPIC',legend:'LEGEND'},earnedOn:'{date} 획득',moreNote:'외 {n}개의 칭호도 획득했어요'};
+const TITLE_KEY='chiikawa-titles-v1',TITLE_TIERS=['common','rare','epic','legend'],toast=$('#title-toast'),toastCard=toast.querySelector('.tt-card');
+const UI_DEFAULT={toastHeader:'칭호 획득!',toastLine:'새로운 칭호 [ {name} ] 를 획득했습니다!',toastGoList:'칭호 목록 ›',listTitle:'칭호 목록',listCount:'획득 {n} / {total}',lockedLabel:'미획득',lockedHiddenName:'???',titleListSubtitle:'',tabCards:'카드 목록',tabTitles:'칭호 목록',tierLabels:{common:'COMMON',rare:'RARE',epic:'EPIC',legend:'LEGEND'},earnedOn:'{date} 획득',moreNote:'외 {n}개의 칭호도 획득했어요',lockedNote:'조건은 비밀입니다. 뽑다 보면 알게 됩니다.',lockedSr:'비밀 칭호',lockedOpen:'비밀 칭호, 열어 보기'};
 const ui = (key) => TITLE_UI?.[key] ?? UI_DEFAULT[key];
 const fill = (text,values) => String(text).replace(/\{(\w+)\}/g,(match,key)=>key in values ? values[key] : match);
 const tierOf = (title) => TITLE_TIERS.includes(title.tier) ? title.tier : 'common';
+const tierLabel = (tier) => ui('tierLabels')?.[tier] ?? UI_DEFAULT.tierLabels[tier];
 const pad2 = (n) => String(n).padStart(2,'0');
 const titleDate = (at) => { const date=new Date(at);return `${date.getFullYear()}.${pad2(date.getMonth()+1)}.${pad2(date.getDate())}`; };
 function readTitleState() {
@@ -282,83 +283,146 @@ function applyTitleUi() {
   document.querySelectorAll('[data-list-switch=cards]').forEach((button)=>{button.textContent=ui('tabCards');});
   document.querySelectorAll('[data-list-switch=titles]').forEach((button)=>{button.textContent=ui('tabTitles');});
   $('#title-heading').textContent=ui('listTitle');$('#title-list').innerHTML=`${escapeHTML(ui('tabTitles'))} <span aria-hidden="true">★</span>`;
-  $('#title-ok').textContent=ui('toastClose');$('#title-open').textContent=ui('toastGoList');
+  $('#title-open').textContent=ui('toastGoList');
 }
 
-// 획득 팝업: 화면 가운데 모달. 한 번에 하나씩 큐(최대 3개, 나머지는 "외 N개")로 보여 주고, 탭/클릭/확인은 다음으로, Esc 는 전부 닫기, 5초 뒤 자동으로 넘어간다.
-const TOAST_DELAY=450,TOAST_HOLD=5000;
-let toastQueue=[],toastTotal=0,toastMore=0,toastReturn=null,toastTimer=0,toastHover=false,toastShownAt=0;
-function armToast(ms) {
-  clearTimeout(toastTimer);
-  // Keyboard users, a hovered panel and the focused "list" link keep the popup open until they act (no timeout for them).
-  toastTimer=setTimeout(()=>{if(toast.hidden || document.documentElement.dataset.kbd || toastHover || document.activeElement===$('#title-open'))return;nextTitleToast();},ms);
+// 획득 배너: 카드 위에 떠 있는 비모달 알림(role=status). 뒤 화면을 막지 않고 포커스도 가져가지 않는다.
+// 한 번에 하나씩 큐(최대 3개, 나머지는 "외 N개")로 tier 별 시간만큼 보여 주고, 탭/클릭은 그 배너만 닫고(다음 배너가 이어짐), Esc 는 전부 닫는다. 호버/포커스 중에는 시간이 멈추고, 화면이 바뀌면 큐째 정리된다.
+const TOAST_HOLD={common:3800,rare:4400,epic:5200,legend:6200},TOAST_OUT=400,TOAST_SOUND=320,TOAST_GAP=250,TOAST_GUARD=600,TOAST_RESUME=1500;
+let toastQueue=[],toastMore=0,toastTimer=0,toastDue=0,toastSound=0,toastShownAt=0;
+const toastHolds=new Set(); // 'pointer' / 'focus': while any is set the auto-close clock is stopped
+const toastBusy = () => !toast.hidden || toastQueue.length>0;
+function armToast(ms) { clearTimeout(toastTimer);toastDue=performance.now()+ms;toastTimer=setTimeout(leaveTitleToast,ms); }
+// The name twice: whole for screen readers, per-letter (grouped by word, --i = letter number) for the staggered entrance.
+function nameMarkup(name,spoken=name) {
+  let i=0;
+  const words=String(name).split(/\s+/).filter(Boolean).map((word)=>`<span class="tt-w">${Array.from(word).map((char)=>`<span class="tt-ch" style="--i:${i++}">${escapeHTML(char)}</span>`).join('')}</span>`).join(' ');
+  return `<span class="tt-sr">${escapeHTML(spoken)}</span><span class="tt-vis" aria-hidden="true">${words}</span>`;
 }
+// The title typeface (assets/fonts/title-display.woff2, preloaded in index.html): make sure it is loading before a name is drawn; until it arrives the names use the fallback fonts.
+const loadTitleFont = () => { try{document.fonts?.load?.('900 1em TitleDisplay')?.catch?.(()=>{});}catch{/* No Font Loading API: the fallback font is used. */} };
+loadTitleFont();
 function showTitleToast() {
-  const title=toastQueue[0];if(!title)return dismissTitleToast();
-  const tier=tierOf(title),last=toastQueue.length===1,name=escapeHTML(title.name);
-  toastPanel.dataset.tier=tier;
-  $('#tt-eyebrow').textContent=ui('toastEyebrow');$('#tt-index').textContent=toastTotal>1 ? `${toastTotal-toastQueue.length+1} / ${toastTotal}` : '';
-  $('#tt-header').textContent=ui('toastHeader');$('#tt-flavor').textContent=title.flavor;
+  const title=toastQueue[0];if(!title)return;loadTitleFont();
+  const tier=tierOf(title),last=toastQueue.length===1;
+  clearTimeout(toastSound);toast.dataset.tier=tier;toast.classList.remove('is-in','is-out');toast.hidden=false;toastHolds.clear();
+  // The live region is visible before its text is set, so screen readers announce the whole sentence.
+  const [pre='',post='']=String(ui('toastLine')).split('{name}');
+  const parts={'.tt-pre':pre.replace(/\s*\[\s*$/,'').trim(),'.tt-post':post.replace(/^\s*\]\s*/,'').trim()};
+  for(const [selector,text] of Object.entries(parts)){const part=toast.querySelector(selector);part.textContent=text;part.hidden=!text;}
+  $('#tt-eyebrow').textContent=ui('toastHeader');$('#tt-flavor').textContent=title.flavor;$('#tt-name').innerHTML=nameMarkup(title.name);
   $('#tt-sub').textContent=title.sub||'';$('#tt-sub').hidden=!title.sub;
-  // The title name (with its [ ] if the template has them) is the gold part of the sentence.
-  $('#tt-line').innerHTML=escapeHTML(ui('toastLine')).replace(/(\[\s*)?\{name\}(\s*\])?/,(match,open,close)=>`<b>${open||''}${name}${close||''}</b>`);
   $('#tt-more').textContent=last && toastMore ? fill(ui('moreNote'),{n:toastMore}) : '';$('#tt-more').hidden=!(last && toastMore);
-  toast.classList.remove('is-in');void toast.offsetWidth;toast.classList.add('is-in');
-  toastShownAt=performance.now();playTitle(tier);
-  $('#title-ok').focus({preventScroll:true});armToast((reducedMotion.matches ? 0 : TOAST_DELAY)+TOAST_HOLD);
+  void toast.offsetWidth;toast.classList.add('is-in'); // reflow first so a queued banner replays its entrance
+  toastShownAt=performance.now();armToast(TOAST_HOLD[tier]);
+  // The sound lands with the first letter of the name rising.
+  if(reducedMotion.matches)playTitle(tier);else toastSound=setTimeout(()=>playTitle(tier),TOAST_SOUND);
 }
 function openTitleToast(won) {
   const rank = (title) => TITLE_TIERS.indexOf(tierOf(title));
+  dismissTitleToast();
   // Best three win a slot, shown from the lowest to the highest tier so the climax comes last.
-  toastQueue=won.slice().sort((a,b)=>rank(b)-rank(a)).slice(0,3).reverse();toastTotal=toastQueue.length;toastMore=won.length-toastTotal;
-  toastReturn=document.activeElement;toastHover=false;
-  toast.hidden=false;scene.setAttribute('inert','');scene.setAttribute('aria-hidden','true');
-  $('#announcement').textContent+=` ${ui('toastHeader')} ${toastQueue.map((title)=>title.name).join(', ')}`;
+  toastQueue=won.slice().sort((a,b)=>rank(b)-rank(a)).slice(0,3).reverse();toastMore=won.length-toastQueue.length;
   showTitleToast();
 }
-function nextTitleToast() { toastQueue.shift();toastQueue.length ? showTitleToast() : dismissTitleToast(); }
-// Closes the popup (and drops the rest of the queue). restoreFocus=false when the caller moves focus itself (screen changes).
-function dismissTitleToast(restoreFocus=true) {
-  clearTimeout(toastTimer);toastQueue=[];toastHover=false;
-  if(toast.hidden)return;
-  toast.hidden=true;toast.classList.remove('is-in');scene.removeAttribute('inert');scene.removeAttribute('aria-hidden');
-  const back=toastReturn;toastReturn=null;
-  if(restoreFocus)(back && back.isConnected!==false && !back.hidden ? back : $('#card-list')).focus({preventScroll:true});
+// Fades the current banner out (CSS animation tt-out; a timer is the fallback), then after a short gap brings in the next one.
+function leaveTitleToast() {
+  if(toast.hidden || toast.classList.contains('is-out'))return;
+  clearTimeout(toastTimer);toastQueue.shift();
+  if(reducedMotion.matches)return finishTitleToast();
+  toast.classList.remove('is-in');toast.classList.add('is-out');toastTimer=setTimeout(finishTitleToast,TOAST_OUT);
 }
+function finishTitleToast() { clearTimeout(toastTimer);hideTitleToast();if(toastQueue.length)toastTimer=setTimeout(showTitleToast,TOAST_GAP); }
+function hideTitleToast() {
+  const focused=toast.contains(document.activeElement);
+  toast.hidden=true;toast.classList.remove('is-in','is-out');toastHolds.clear();
+  if(focused){if($('#result-actions').hidden)document.activeElement.blur();else $('#card-list').focus({preventScroll:true});}
+}
+// Drops the banner and the rest of the queue at once (Esc, link, any screen change).
+function dismissTitleToast() { clearTimeout(toastTimer);clearTimeout(toastSound);toastQueue=[];if(!toast.hidden)hideTitleToast(); }
+function holdToast(kind) { if(toast.hidden || toast.classList.contains('is-out') || toastHolds.has(kind))return;if(!toastHolds.size){clearTimeout(toastTimer);toastDue=Math.max(toastDue-performance.now(),0);}toastHolds.add(kind); }
+function releaseToast(kind) { if(!toastHolds.delete(kind) || toastHolds.size || toast.hidden || toast.classList.contains('is-out'))return;armToast(Math.max(toastDue,TOAST_RESUME)); }
 toast.addEventListener('click',(event)=>{
-  if(performance.now()-toastShownAt<TOAST_DELAY+150 && !reducedMotion.matches)return; // a stray tap during the entrance must not skip it unseen
-  if(event.target.closest('#title-open')){dismissTitleToast(false);showTitles();}else nextTitleToast();
+  if(performance.now()-toastShownAt<TOAST_GUARD)return; // a stray tap while the banner is still arriving must not skip it unseen
+  if(event.target.closest('#title-open')){dismissTitleToast();showTitles();}else leaveTitleToast();
 });
-toast.addEventListener('keydown',(event)=>{
-  if(event.key!=='Tab')return;
-  const first=$('#title-ok'),last=$('#title-open'),edge=event.shiftKey ? first : last;
-  if(document.activeElement===edge || !toast.contains(document.activeElement)){event.preventDefault();(event.shiftKey ? last : first).focus({preventScroll:true});}
-});
-toastPanel.addEventListener('pointerenter',()=>{toastHover=true;clearTimeout(toastTimer);});
-toastPanel.addEventListener('pointerleave',()=>{toastHover=false;if(!toast.hidden)armToast(2500);});
+toastCard.addEventListener('pointerenter',()=>holdToast('pointer'));toastCard.addEventListener('pointerleave',()=>releaseToast('pointer'));
+toastCard.addEventListener('animationend',(event)=>{if(event.animationName==='tt-out' && toast.classList.contains('is-out'))finishTitleToast();});
+toast.addEventListener('focusin',()=>holdToast('focus'));toast.addEventListener('focusout',()=>releaseToast('focus'));
 
-// 칭호 목록: 획득 = 이름·대사·조건·획득일(+ tier 장식), 미획득 = 검은 카드 + ? + ???(칭호는 전부 히든: 이름·대사·조건·힌트 모두 DOM 에 넣지 않는다).
+// 칭호 목록: 티어별 섹션(legend → epic → rare → common, 칭호 없는 티어는 생략, 섹션 안은 titles.js 정의 순서). 헤더 = 티어 라벨 + 획득 n / m + 진행 바.
+// 카드는 전부 <button>(누르면 상세 팝업): 획득 = 이름만(대사·조건·획득일은 팝업에서), 미획득 = 검은 카드 + ? + ???(칭호는 전부 히든: 이름·대사·조건·힌트·id 모두 DOM 에 넣지 않는다 — 어느 티어인지는 섹션이 알려 준다).
 function renderTitles() {
+  closeTitleDetail({instant:true,restore:false});
   titleState=mergeTitleState(titleState,readTitleState());
   const have=TITLES.filter((title)=>titleState.earned[title.id]>0).length;
   $('#title-count').textContent=fill(ui('listCount'),{n:have,total:TITLES.length});
   $('#title-summary').textContent=ui('titleListSubtitle');
-  $('#title-grid').innerHTML=TITLES.map((title)=>{
-    const at=titleState.earned[title.id],tier=tierOf(title);
-    if(!(at>0))return `<article class="title-card locked"><span class="tc-q" aria-hidden="true">?</span><p class="tc-locked">${escapeHTML(ui('lockedLabel'))}</p><p class="tc-hint">${escapeHTML(ui('lockedHiddenName'))}</p></article>`;
-    const label=ui('tierLabels')?.[tier] ?? UI_DEFAULT.tierLabels[tier];
-    return `<article class="title-card owned" data-tier="${tier}"><span class="tc-tier">${escapeHTML(label)}</span><h3 class="tc-name">${escapeHTML(title.name)}</h3><p class="tc-flavor">${escapeHTML(title.flavor)}</p>${title.sub ? `<p class="tc-sub">${escapeHTML(title.sub)}</p>` : ''}<p class="tc-desc">${escapeHTML(title.desc)}</p><time class="tc-date" datetime="${new Date(at).toISOString()}">${escapeHTML(fill(ui('earnedOn'),{date:titleDate(at)}))}</time></article>`;
+  $('#title-grid').innerHTML=TITLE_TIERS.slice().reverse().map((tier)=>{
+    const entries=TITLES.filter((title)=>tierOf(title)===tier);
+    if(!entries.length)return '';
+    const label=tierLabel(tier),owned=entries.filter((title)=>titleState.earned[title.id]>0).length,id=`tier-panel-${tier}`;
+    const cards=entries.map((title)=>{
+      const at=titleState.earned[title.id];
+      if(!(at>0))return `<button type="button" class="title-card locked" aria-haspopup="dialog" aria-label="${escapeHTML(ui('lockedOpen'))}"><span class="tc-q" aria-hidden="true">?</span><span class="tc-hint" aria-hidden="true">${escapeHTML(ui('lockedHiddenName'))}</span></button>`;
+      return `<button type="button" class="title-card owned" data-title-id="${escapeHTML(title.id)}" aria-haspopup="dialog"><span class="tc-name">${escapeHTML(title.name)}</span></button>`;
+    }).join('');
+    return `<section class="tier-panel" id="${id}" data-tier="${tier}" aria-labelledby="${id}-title"><header class="tp-head"><h3 class="tp-title" id="${id}-title"><b>${escapeHTML(label)}</b></h3><span class="tp-fx" aria-hidden="true"></span><span class="tp-progress"><span class="tp-num">${owned} / ${entries.length}</span><span class="tp-bar" aria-hidden="true"><i style="width:${(owned/entries.length*100).toFixed(1)}%"></i></span></span></header><div class="tp-cards">${cards}</div></section>`;
   }).join('');
 }
 function showTitles() {
   if(!collectionUnlocked || !stable() || phase==='titles')return;
-  cancelPending();dismissTitleToast(false);showQuip('');
+  cancelPending();dismissTitleToast();showQuip('');
   $('#bundle-stage').hidden=true;$('#pack-list').hidden=true;$('#pack-position').hidden=true;$('#reveal-zone').hidden=true;$('#reveal-zone').replaceChildren();$('#collection-panel').hidden=true;$('#collection-grid').replaceChildren();
   scene.classList.remove('charging','torn','releasing','unveiling','previewing','skipped','card-leaving');clearGrade();live=null;
   setPhase('titles');setView('titles');resetEffects();renderTitles();
   $('#title-panel').hidden=false;$('#title-panel').scrollTop=0;$('#message').textContent='';syncNavigation();
   $('#title-heading').focus({preventScroll:true});refreshMagnetic();
 }
+
+// 칭호 상세 팝업: 목록의 칭호를 누르면 뜨는 반투명 유리 다이얼로그(모달). 뒤 화면(#scene)은 inert 로 두고 스크림(연한 딤)을 누르면 닫힌다.
+// 획득 = 티어 · 이름(히어로) · 대사 · 보조 · 조건 · 획득일, 미획득 = 티어 · ??? · 비밀 안내 문구뿐(이름·조건·대사·힌트는 DOM 에 넣지 않는다).
+// 닫기: Esc · 스크림 · × (200ms 역방향 후 숨김, 포커스는 눌렀던 카드로). 화면이 바뀌면(clearStage 등) 즉시 정리한다.
+const detail=$('#title-detail'),DETAIL_OUT=200;
+let detailReturn=null,detailTimer=0;
+const detailOpen = () => !detail.hidden && !detail.classList.contains('is-out');
+function openTitleDetail(card) {
+  if(phase!=='titles' || !backup.hidden)return;loadTitleFont();
+  const title=card.dataset.titleId ? TITLES.find((item)=>item.id===card.dataset.titleId) : null,at=title ? titleState.earned[title.id] : 0,earned=at>0;
+  if(card.dataset.titleId && !earned)return;
+  const tier=title ? tierOf(title) : (TITLE_TIERS.includes(card.closest('.tier-panel')?.dataset.tier) ? card.closest('.tier-panel').dataset.tier : 'common');
+  clearTimeout(detailTimer);detail.classList.remove('is-out');
+  detail.dataset.tier=tier;$('#td-eyebrow').textContent=tierLabel(tier);
+  $('#td-name').innerHTML=earned ? nameMarkup(title.name) : nameMarkup(ui('lockedHiddenName'),ui('lockedSr'));
+  $('#td-flavor').textContent=earned ? title.flavor : '';$('#td-flavor').hidden=!earned;
+  $('#td-sub').textContent=earned ? title.sub||'' : '';$('#td-sub').hidden=!(earned && title.sub);
+  $('#td-info').hidden=!earned;$('#td-desc').textContent=earned ? title.desc : '';
+  $('#td-date').textContent=earned ? fill(ui('earnedOn'),{date:titleDate(at)}) : '';if(earned)$('#td-date').setAttribute('datetime',new Date(at).toISOString());else $('#td-date').removeAttribute('datetime');
+  $('#td-note').textContent=earned ? '' : (ui('titleListSubtitle') || UI_DEFAULT.lockedNote);$('#td-note').hidden=earned;
+  detailReturn=card;detail.hidden=false;scene.setAttribute('inert','');scene.setAttribute('aria-hidden','true');
+  detail.querySelector('.td-body').scrollTop=0;$('#td-close').focus({preventScroll:true});
+}
+function finishTitleDetail() {
+  clearTimeout(detailTimer);detail.hidden=true;detail.classList.remove('is-out');
+  ['#td-eyebrow','#td-name','#td-flavor','#td-sub','#td-desc','#td-date','#td-note'].forEach((id)=>{$(id).textContent='';});
+}
+// instant: no exit animation (a screen change / re-render). restore:false: leave focus alone (the opener is gone or the caller moves it).
+function closeTitleDetail({instant=false,restore=true}={}) {
+  if(detail.hidden)return;
+  const closing=detail.classList.contains('is-out');
+  if(closing && !instant)return;
+  clearTimeout(detailTimer);
+  if(!closing){
+    if(backup.hidden){scene.removeAttribute('inert');scene.removeAttribute('aria-hidden');}
+    const back=detailReturn;detailReturn=null;
+    if(restore)(back && back.isConnected!==false && !back.hidden ? back : $('#title-heading')).focus({preventScroll:true});
+  }
+  if(instant){finishTitleDetail();return;}
+  detail.classList.add('is-out');detailTimer=setTimeout(finishTitleDetail,DETAIL_OUT);
+}
+$('#title-grid').addEventListener('click',(event)=>{const card=event.target.closest('.title-card');if(card)openTitleDetail(card);});
+detail.addEventListener('click',(event)=>{if(event.target.closest('.td-scrim') || event.target.closest('.td-close'))closeTitleDetail();});
+detail.addEventListener('keydown',(event)=>{if(event.key==='Tab'){event.preventDefault();$('#td-close').focus({preventScroll:true});}}); // the × is the only control: keep focus on it
 
 // ---- 저장 코드: 기록(카드·칭호)을 한 줄 코드로 내보내고 불러온다. 기록은 이 브라우저(localStorage)에만 있어서, 사이트 데이터를 지우거나 기기를 바꿔도 이어 할 수 있게 한다.
 // 코드 만들기/읽기/합치기는 backup.js(순수 함수), 여기는 화면·저장 반영만. 전부 기기 안에서 처리하고 서버로 보내지 않는다. 입력은 textContent/value 로만 다루고, 불러온 값은 backup.js 가 전부 재검증한다.
@@ -405,7 +469,7 @@ function setBkTab(tab,focus=true) {
   if(focus)$('#bk-tab-'+tab).focus({preventScroll:true});
 }
 function openBackup() {
-  if(!backup.hidden || !stable() || !toast.hidden)return;
+  if(!backup.hidden || !stable() || !toast.hidden || !detail.hidden)return;
   bkReturn=document.activeElement;resetImport(true);
   backup.hidden=false;scene.setAttribute('inert','');scene.setAttribute('aria-hidden','true');bkPanel.scrollTop=0;
   setBkTab('export');
@@ -633,7 +697,7 @@ function clearStage() {
   cancelPending();collectionReturn=null;selectedCard=null;prepared=null;drag=null;resetTear();
   $('#reveal-zone').hidden=true;$('#reveal-zone').replaceChildren();
   $('#collection-panel').hidden=true;$('#collection-grid').replaceChildren();
-  $('#title-panel').hidden=true;$('#title-grid').replaceChildren();dismissTitleToast(false);showQuip('');
+  closeTitleDetail({instant:true,restore:false});$('#title-panel').hidden=true;$('#title-grid').replaceChildren();dismissTitleToast();showQuip('');
   $('#pack-list').hidden=true;$('#pack-list').classList.remove('departing');$('#pack-grid').replaceChildren();
   $('#pack-position').hidden=true;$('#pack-position').classList.remove('pack-arriving');resetBoxes();
   $('#save-card').removeAttribute('href');$('#save-card').removeAttribute('download');
@@ -645,6 +709,7 @@ function clearStage() {
 }
 function nextPack() {
   if(!stable())return;
+  dismissTitleToast();
   const enter=()=>{
     clearStage();
     setPackImage(activePack);
@@ -701,8 +766,8 @@ function renderCollection(pack) {
 function showCollection(packId=activePack.id) {
   if(!collectionUnlocked || !stable())return;
   const pack=PACK_SETS.find((item)=>item.id===packId);if(!pack)return;
-  cancelPending();dismissTitleToast(false);showQuip('');collectionPackId=pack.id;activePack=pack;syncCounts(pack);
-  $('#title-panel').hidden=true;$('#title-grid').replaceChildren();
+  cancelPending();dismissTitleToast();showQuip('');collectionPackId=pack.id;activePack=pack;syncCounts(pack);
+  closeTitleDetail({instant:true,restore:false});$('#title-panel').hidden=true;$('#title-grid').replaceChildren();
   $('#bundle-stage').hidden=true;$('#pack-list').hidden=true;$('#pack-position').hidden=true;$('#reveal-zone').hidden=true;$('#reveal-zone').replaceChildren();
   scene.classList.remove('charging','torn','releasing','unveiling','previewing','skipped','card-leaving');clearGrade();live=null;
   setPhase('collection');setView('collection');resetEffects();renderCollection(pack);
@@ -749,5 +814,5 @@ document.querySelectorAll('.list-switch').forEach((group)=>group.addEventListene
   if(button.dataset.listSwitch==='titles')showTitles();else showCollection(collectionPackId);
 }));
 $('#skip-fx')?.addEventListener('click',skipOpening);
-document.addEventListener('keydown',(event)=>{if(event.key==='Escape'){if(!backup.hidden)closeBackup();else if(toast.hidden)skipOpening();else dismissTitleToast();}});
+document.addEventListener('keydown',(event)=>{if(event.key==='Escape'){if(detailOpen())closeTitleDetail();else if(!backup.hidden)closeBackup();else if(!toastBusy())skipOpening();else dismissTitleToast();}});
 applyTitleUi();renderPackList();syncNavigation();refreshMagnetic();
